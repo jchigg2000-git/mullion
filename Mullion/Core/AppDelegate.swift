@@ -38,6 +38,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         DefaultBindingsSeeder.seedIfNeeded(bindingStore: bindingStore, layoutStore: layoutStore)
 
+        dispatcher.onAccessibilityRequired = { [weak self] in
+            self?.showOnboardingIfNeeded()
+        }
+
         let hotkeys = HotkeyManager()
         hotkeys.onTrigger = { [weak dispatcher] id in dispatcher?.handle(bindingID: id) }
         hotkeys.register(bindingStore.bindings)
@@ -48,14 +52,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if trusted {
                 self?.onboardingWindow?.close()
                 self?.onboardingWindow = nil
+            } else {
+                // Rebuilds and TCC resets revoke trust mid-session. Re-surface
+                // onboarding so the user gets a signal instead of silent chords.
+                self?.showOnboardingIfNeeded()
             }
         }
 
-        if !AccessibilityGate.shared.isTrusted {
-            let win = OnboardingWindow()
-            win.show()
-            onboardingWindow = win
-        }
+        showOnboardingIfNeeded()
 
         if settingsStore.autoRestoreEnabled, AccessibilityGate.shared.isTrusted {
             AutoRestore(
@@ -65,6 +69,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 mover: ChainedWindowMover.default
             ).run()
         }
+    }
+
+    private func showOnboardingIfNeeded() {
+        guard !AccessibilityGate.shared.isTrusted else { return }
+        if let existing = onboardingWindow {
+            existing.show()
+            return
+        }
+        let win = OnboardingWindow()
+        win.show()
+        onboardingWindow = win
     }
 
     private func reloadAll() {
