@@ -68,3 +68,6 @@ DerivedData/
 
 # Swift code coverage profile artifacts emitted by `xcodebuild test`
 *.profraw
+
+# Claude Code local session state (plans, agent configs, etc.)
+.claude/
