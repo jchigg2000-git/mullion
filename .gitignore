@@ -64,6 +64,7 @@ fastlane/test_output
 # XcodeGen — project file is generated from project.yml
 *.xcodeproj/
 DerivedData/
+build/
 .DS_Store
 
 # Swift code coverage profile artifacts emitted by `xcodebuild test`
