@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotkeyManager: HotkeyManager?
     private var dispatcher: ActionDispatcher?
     private var onboardingWindow: OnboardingWindow?
+    private var layoutEditorWindow: LayoutEditorWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         log.notice("Mullion launched. Accessibility trusted: \(AccessibilityGate.shared.isTrusted, privacy: .public)")
@@ -25,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onToggleAutoRestore: { [weak self] enabled in
                 self?.settingsStore.autoRestoreEnabled = enabled
             },
+            onOpenEditor: { [weak self] in self?.showLayoutEditor() },
             onQuit: { NSApplication.shared.terminate(nil) }
         )
         statusItemController = StatusItemController(menuBuilder: menu)
@@ -88,5 +90,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appRuleStore.reload()
         hotkeyManager?.register(bindingStore.bindings)
         log.notice("Configuration reloaded")
+    }
+
+    private func showLayoutEditor() {
+        if let existing = layoutEditorWindow {
+            existing.show()
+            return
+        }
+        let model = LayoutEditorModel(
+            layoutStore: layoutStore,
+            bindingsProvider: { [bindingStore] in bindingStore.bindings }
+        )
+        let window = LayoutEditorWindow(model: model)
+        window.show()
+        layoutEditorWindow = window
     }
 }

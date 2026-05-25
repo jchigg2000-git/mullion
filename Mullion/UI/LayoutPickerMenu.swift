@@ -8,17 +8,20 @@ final class LayoutPickerMenu: NSObject {
     private let settingsStore: SettingsStore
     private let onReload: () -> Void
     private let onToggleAutoRestore: (Bool) -> Void
+    private let onOpenEditor: () -> Void
     private let onQuit: () -> Void
 
     init(layoutStore: LayoutStore,
          settingsStore: SettingsStore,
          onReload: @escaping () -> Void,
          onToggleAutoRestore: @escaping (Bool) -> Void,
+         onOpenEditor: @escaping () -> Void,
          onQuit: @escaping () -> Void) {
         self.layoutStore = layoutStore
         self.settingsStore = settingsStore
         self.onReload = onReload
         self.onToggleAutoRestore = onToggleAutoRestore
+        self.onOpenEditor = onOpenEditor
         self.onQuit = onQuit
     }
 
@@ -70,6 +73,10 @@ final class LayoutPickerMenu: NSObject {
         autoRestore.state = settingsStore.autoRestoreEnabled ? .on : .off
         menu.addItem(autoRestore)
 
+        let editor = NSMenuItem(title: "Layout Editor…", action: #selector(openEditorAction), keyEquivalent: "e")
+        editor.target = self
+        menu.addItem(editor)
+
         menu.addItem(.separator())
 
         let revealItem = NSMenuItem(title: "Reveal Config in Finder", action: #selector(revealConfig), keyEquivalent: "")
@@ -89,6 +96,10 @@ final class LayoutPickerMenu: NSObject {
 
     @objc private func toggleAutoRestoreAction() {
         onToggleAutoRestore(!settingsStore.autoRestoreEnabled)
+    }
+
+    @objc private func openEditorAction() {
+        onOpenEditor()
     }
 
     @objc private func revealConfig() {
