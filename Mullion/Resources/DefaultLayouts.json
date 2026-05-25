@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "layouts": [
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "name": "Ultrawide 6-pane",
+      "displayPredicate": { "aspectRatioAtLeast": { "min": 2.3 } },
+      "zones": [
+        { "id": "a1111111-0000-0000-0000-000000000001", "name": "Top left",     "x": 0.000, "y": 0.0, "width": 0.333, "height": 0.5, "anchor": "topLeft" },
+        { "id": "a1111111-0000-0000-0000-000000000002", "name": "Top middle",   "x": 0.333, "y": 0.0, "width": 0.334, "height": 0.5, "anchor": "topLeft" },
+        { "id": "a1111111-0000-0000-0000-000000000003", "name": "Top right",    "x": 0.667, "y": 0.0, "width": 0.333, "height": 0.5, "anchor": "topLeft" },
+        { "id": "a1111111-0000-0000-0000-000000000004", "name": "Bottom left",  "x": 0.000, "y": 0.5, "width": 0.333, "height": 0.5, "anchor": "topLeft" },
+        { "id": "a1111111-0000-0000-0000-000000000005", "name": "Bottom middle","x": 0.333, "y": 0.5, "width": 0.334, "height": 0.5, "anchor": "topLeft" },
+        { "id": "a1111111-0000-0000-0000-000000000006", "name": "Bottom right", "x": 0.667, "y": 0.5, "width": 0.333, "height": 0.5, "anchor": "topLeft" }
+      ]
+    },
+    {
+      "id": "22222222-2222-2222-2222-222222222222",
+      "name": "Ultrawide 1/4 - 1/2 - 1/4",
+      "displayPredicate": { "aspectRatioAtLeast": { "min": 2.3 } },
+      "zones": [
+        { "id": "a2222222-0000-0000-0000-000000000001", "name": "Left rail",  "x": 0.0,  "y": 0.0, "width": 0.25, "height": 1.0, "anchor": "topLeft" },
+        { "id": "a2222222-0000-0000-0000-000000000002", "name": "Center",     "x": 0.25, "y": 0.0, "width": 0.50, "height": 1.0, "anchor": "topLeft" },
+        { "id": "a2222222-0000-0000-0000-000000000003", "name": "Right rail", "x": 0.75, "y": 0.0, "width": 0.25, "height": 1.0, "anchor": "topLeft" }
+      ]
+    },
+    {
+      "id": "33333333-3333-3333-3333-333333333333",
+      "name": "Ultrawide center stage + side rails",
+      "displayPredicate": { "aspectRatioAtLeast": { "min": 2.3 } },
+      "zones": [
+        { "id": "a3333333-0000-0000-0000-000000000001", "name": "Left rail",    "x": 0.0, "y": 0.0, "width": 0.20, "height": 1.0, "anchor": "topLeft" },
+        { "id": "a3333333-0000-0000-0000-000000000002", "name": "Center stage", "x": 0.2, "y": 0.0, "width": 0.60, "height": 1.0, "anchor": "topLeft" },
+        { "id": "a3333333-0000-0000-0000-000000000003", "name": "Right rail",   "x": 0.8, "y": 0.0, "width": 0.20, "height": 1.0, "anchor": "topLeft" }
+      ]
+    },
+    {
+      "id": "44444444-4444-4444-4444-444444444444",
+      "name": "Ultrawide asymmetric main + sidebar",
+      "displayPredicate": { "aspectRatioAtLeast": { "min": 2.3 } },
+      "zones": [
+        { "id": "a4444444-0000-0000-0000-000000000001", "name": "Main",            "x": 0.00, "y": 0.0, "width": 0.65, "height": 1.0, "anchor": "topLeft" },
+        { "id": "a4444444-0000-0000-0000-000000000002", "name": "Sidebar top",     "x": 0.65, "y": 0.0, "width": 0.35, "height": 0.5, "anchor": "topLeft" },
+        { "id": "a4444444-0000-0000-0000-000000000003", "name": "Sidebar bottom",  "x": 0.65, "y": 0.5, "width": 0.35, "height": 0.5, "anchor": "topLeft" }
+      ]
+    },
+    {
+      "id": "55555555-5555-5555-5555-555555555555",
+      "name": "Standard halves and thirds",
+      "displayPredicate": { "anyDisplay": {} },
+      "zones": [
+        { "id": "a5555555-0000-0000-0000-000000000001", "name": "Left half",    "x": 0.000, "y": 0.0, "width": 0.500, "height": 1.0, "anchor": "topLeft" },
+        { "id": "a5555555-0000-0000-0000-000000000002", "name": "Right half",   "x": 0.500, "y": 0.0, "width": 0.500, "height": 1.0, "anchor": "topLeft" },
+        { "id": "a5555555-0000-0000-0000-000000000003", "name": "Left third",   "x": 0.000, "y": 0.0, "width": 0.333, "height": 1.0, "anchor": "topLeft" },
+        { "id": "a5555555-0000-0000-0000-000000000004", "name": "Middle third", "x": 0.333, "y": 0.0, "width": 0.334, "height": 1.0, "anchor": "topLeft" },
+        { "id": "a5555555-0000-0000-0000-000000000005", "name": "Right third",  "x": 0.667, "y": 0.0, "width": 0.333, "height": 1.0, "anchor": "topLeft" },
+        { "id": "a5555555-0000-0000-0000-000000000006", "name": "Maximize",     "x": 0.000, "y": 0.0, "width": 1.000, "height": 1.0, "anchor": "topLeft" }
+      ]
+    }
+  ]
+}

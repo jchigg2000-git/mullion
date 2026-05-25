@@ -36,13 +36,26 @@ Manager integration, drag-to-snap preview UI.
 
 ## Building
 
-Requires Xcode 15+ and macOS 13+.
+Requires Xcode 16+ and macOS 15+ (Sequoia).
+
+The Xcode project is generated from `project.yml` via
+[XcodeGen](https://github.com/yonaskolb/XcodeGen) so the repo stays free of
+binary `.pbxproj` diffs.
 
 ```sh
 git clone https://github.com/jchigg2000-git/mullion.git
 cd mullion
+brew install xcodegen     # one-time
+xcodegen generate
 open Mullion.xcodeproj
 ```
+
+First launch will prompt for Accessibility. Grant in System Settings →
+Privacy & Security → Accessibility; Mullion detects the change automatically.
+
+User-editable configuration lives in `~/Library/Application Support/Mullion/`:
+`layouts.json`, `bindings.json`, `app-rules.json`, `window-history.json`,
+`settings.json`. Pick "Reload Layouts" from the menu-bar item after editing.
 
 ## Contributing
 

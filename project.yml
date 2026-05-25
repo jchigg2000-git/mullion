@@ -1,0 +1,55 @@
+name: Mullion
+options:
+  bundleIdPrefix: com.mullion
+  deploymentTarget:
+    macOS: "15.0"
+  developmentLanguage: en
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+    ENABLE_HARDENED_RUNTIME: YES
+    CODE_SIGN_STYLE: Automatic
+    DEAD_CODE_STRIPPING: YES
+    SWIFT_TREAT_WARNINGS_AS_ERRORS: NO
+    GCC_TREAT_WARNINGS_AS_ERRORS: NO
+    SWIFT_STRICT_CONCURRENCY: minimal
+
+packages:
+  KeyboardShortcuts:
+    url: https://github.com/sindresorhus/KeyboardShortcuts
+    from: "2.2.0"
+
+targets:
+  Mullion:
+    type: application
+    platform: macOS
+    sources:
+      - path: Mullion
+    dependencies:
+      - package: KeyboardShortcuts
+    settings:
+      base:
+        PRODUCT_NAME: Mullion
+        PRODUCT_BUNDLE_IDENTIFIER: com.mullion.Mullion
+        INFOPLIST_FILE: Mullion/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Mullion/Resources/Mullion.entitlements
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks"
+        COMBINE_HIDPI_IMAGES: YES
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+
+  MullionTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: MullionTests
+    dependencies:
+      - target: Mullion
+    settings:
+      base:
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Mullion.app/Contents/MacOS/Mullion"
