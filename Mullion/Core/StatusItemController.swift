@@ -12,9 +12,10 @@ final class StatusItemController {
 
     private func configure() {
         if let button = statusItem.button {
-            let symbol = NSImage(systemSymbolName: "rectangle.split.3x1", accessibilityDescription: "Mullion")
-            symbol?.isTemplate = true
-            button.image = symbol
+            let image = NSImage(named: "MullionMenuBarTemplate")
+            image?.isTemplate = true
+            button.image = image
+            button.image?.accessibilityDescription = "Mullion"
             button.toolTip = "Mullion"
         }
         statusItem.menu = menuBuilder.build()
