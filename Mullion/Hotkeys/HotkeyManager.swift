@@ -21,9 +21,10 @@ final class HotkeyManager {
     }
 
     func unregisterAll() {
-        for (_, name) in registered {
-            KeyboardShortcuts.removeAllHandlers(for: name)
-        }
+        // The library only exposes a global clear. Mullion is the only client
+        // of KeyboardShortcuts in this process, so clearing all handlers
+        // before re-registering from the current bindings is correct.
+        KeyboardShortcuts.removeAllHandlers()
         registered.removeAll()
     }
 }
