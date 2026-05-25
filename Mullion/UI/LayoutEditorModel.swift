@@ -178,6 +178,117 @@ final class LayoutEditorModel {
         workingCopy = copy
     }
 
+    // MARK: Fill empty space
+    //
+    // One-shot bake (not a live constraint). Why one-shot: zones don't have a
+    // parent/sibling relationship in the data model, so "live fill" would
+    // require introducing a constraint system. A one-shot action keeps the
+    // model unchanged and matches how the rest of the inspector works —
+    // the user clicks, a number is written, manual edits still apply.
+    //
+    // Sibling detection: every other zone in the same layout. Overlap on the
+    // perpendicular axis is what makes a sibling relevant — e.g., for "Fill
+    // width" we only care about zones that occupy some of the same Y band.
+    //
+    // Multiple gaps: prefer the gap containing the zone's current center
+    // (the user has positioned the zone *somewhere*, and they probably want
+    // to fill where it already is). Fall back to the largest gap.
+
+    /// Gap on the X axis the selected zone could expand into, or `nil` if
+    /// siblings cover the full [0, 1] band at this zone's Y range.
+    func gapForFillWidth() -> (x: Double, width: Double)? {
+        guard let id = selectedZoneID,
+              let copy = workingCopy,
+              let zone = copy.zones.first(where: { $0.id == id }) else { return nil }
+        return Self.gap(for: zone, in: copy.zones, axis: .horizontal)
+            .map { (x: $0.start, width: $0.length) }
+    }
+
+    /// Gap on the Y axis the selected zone could expand into, or `nil` if
+    /// siblings cover the full [0, 1] band at this zone's X range.
+    func gapForFillHeight() -> (y: Double, height: Double)? {
+        guard let id = selectedZoneID,
+              let copy = workingCopy,
+              let zone = copy.zones.first(where: { $0.id == id }) else { return nil }
+        return Self.gap(for: zone, in: copy.zones, axis: .vertical)
+            .map { (y: $0.start, height: $0.length) }
+    }
+
+    func fillWidth() {
+        guard let id = selectedZoneID, let gap = gapForFillWidth() else { return }
+        updateZone(id: id) { z in
+            z.x = gap.x
+            z.width = gap.width
+        }
+    }
+
+    func fillHeight() {
+        guard let id = selectedZoneID, let gap = gapForFillHeight() else { return }
+        updateZone(id: id) { z in
+            z.y = gap.y
+            z.height = gap.height
+        }
+    }
+
+    private enum FillAxis {
+        case horizontal
+        case vertical
+    }
+
+    /// Find a gap on `axis` that `zone` could fill, considering only siblings
+    /// that overlap on the perpendicular axis. Gaps smaller than 1% of the
+    /// display are filtered out as noise.
+    private static func gap(for zone: Zone,
+                            in zones: [Zone],
+                            axis: FillAxis) -> (start: Double, length: Double)? {
+        let start: (Zone) -> Double = { axis == .horizontal ? $0.x : $0.y }
+        let length: (Zone) -> Double = { axis == .horizontal ? $0.width : $0.height }
+        let perpStart: (Zone) -> Double = { axis == .horizontal ? $0.y : $0.x }
+        let perpLength: (Zone) -> Double = { axis == .horizontal ? $0.height : $0.width }
+
+        let perp1 = perpStart(zone)
+        let perp2 = perp1 + perpLength(zone)
+
+        let overlapping = zones.filter { other in
+            guard other.id != zone.id else { return false }
+            let o1 = perpStart(other)
+            let o2 = o1 + perpLength(other)
+            return o1 < perp2 && o2 > perp1
+        }
+
+        let raw = overlapping
+            .map { (start($0), start($0) + length($0)) }
+            .sorted { $0.0 < $1.0 }
+
+        var merged: [(Double, Double)] = []
+        for interval in raw {
+            if let last = merged.last, interval.0 <= last.1 {
+                merged[merged.count - 1] = (last.0, max(last.1, interval.1))
+            } else {
+                merged.append(interval)
+            }
+        }
+
+        var gaps: [(Double, Double)] = []
+        var cursor: Double = 0
+        for interval in merged {
+            if interval.0 > cursor { gaps.append((cursor, interval.0)) }
+            cursor = max(cursor, interval.1)
+        }
+        if cursor < 1 { gaps.append((cursor, 1)) }
+
+        let minimumGap = 0.01
+        let viable = gaps.filter { $0.1 - $0.0 >= minimumGap }
+        if viable.isEmpty { return nil }
+
+        let center = start(zone) + length(zone) / 2
+        if let containing = viable.first(where: { $0.0 <= center && center <= $0.1 }) {
+            return (start: containing.0, length: containing.1 - containing.0)
+        }
+        return viable.max { ($0.1 - $0.0) < ($1.1 - $1.0) }
+            .map { (start: $0.0, length: $0.1 - $0.0) }
+    }
+
     // MARK: Preview screen
 
     /// The NSScreen to render the preview against. Picks (in order):
