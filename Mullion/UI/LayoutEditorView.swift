@@ -279,21 +279,27 @@ struct LayoutEditorView: View {
                     Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 6) {
                         GridRow {
                             Text("X")
-                            stepper(value: zoneBinding(\.x, fallback: zone.x))
+                            stepper(value: zoneBinding(\.x, fallback: zone.x),
+                                    presets: AxisPresets.xOrigin)
                         }
                         GridRow {
                             Text("Y")
-                            stepper(value: zoneBinding(\.y, fallback: zone.y))
+                            stepper(value: zoneBinding(\.y, fallback: zone.y),
+                                    presets: AxisPresets.yOrigin)
                         }
                         GridRow {
                             Text("Width")
-                            stepper(value: zoneBinding(\.width, fallback: zone.width))
+                            stepper(value: zoneBinding(\.width, fallback: zone.width),
+                                    presets: AxisPresets.widthSpan)
                         }
                         GridRow {
                             Text("Height")
-                            stepper(value: zoneBinding(\.height, fallback: zone.height))
+                            stepper(value: zoneBinding(\.height, fallback: zone.height),
+                                    presets: AxisPresets.heightSpan)
                         }
                     }
+
+                    fillActions
 
                     Picker("Anchor", selection: zoneBinding(\.anchor, fallback: zone.anchor)) {
                         ForEach(Anchor.allCases, id: \.self) { a in
@@ -348,13 +354,51 @@ struct LayoutEditorView: View {
         }
     }
 
-    private func stepper(value: Binding<Double>) -> some View {
+    private func stepper(value: Binding<Double>,
+                         presets: [AxisPreset]) -> some View {
         HStack(spacing: 6) {
             TextField("", value: value, format: .number.precision(.fractionLength(3)))
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 80)
             Stepper("", value: value, in: 0...1, step: 0.01)
                 .labelsHidden()
+            Menu {
+                ForEach(presets) { preset in
+                    Button(preset.label) { value.wrappedValue = preset.value }
+                }
+            } label: {
+                Image(systemName: "percent")
+                    .font(.caption)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Common percentages")
+        }
+    }
+
+    @ViewBuilder
+    private var fillActions: some View {
+        let widthGap = model.gapForFillWidth()
+        let heightGap = model.gapForFillHeight()
+        HStack(spacing: 8) {
+            Button {
+                model.fillWidth()
+            } label: {
+                Label("Fill width", systemImage: "arrow.left.and.right")
+            }
+            .disabled(widthGap == nil)
+            .help(widthGap.map { "Snap to gap \(String(format: "%.2f", $0.x))…\(String(format: "%.2f", $0.x + $0.width))" }
+                  ?? "No horizontal gap among zones overlapping this Y band")
+
+            Button {
+                model.fillHeight()
+            } label: {
+                Label("Fill height", systemImage: "arrow.up.and.down")
+            }
+            .disabled(heightGap == nil)
+            .help(heightGap.map { "Snap to gap \(String(format: "%.2f", $0.y))…\(String(format: "%.2f", $0.y + $0.height))" }
+                  ?? "No vertical gap among zones overlapping this X band")
         }
     }
 
