@@ -1,9 +1,11 @@
 import AppKit
+import os
 
 /// Orchestrates a single hotkey trigger: resolve focused window → pick the
 /// next zone in the cycle → resolve the screen → compute the frame → apply
 /// via mover → record the placement.
 final class ActionDispatcher {
+    private let log = Logger(subsystem: "com.mullion.Mullion", category: "dispatcher")
     private let layoutStore: LayoutStore
     private let bindingsProvider: () -> [HotkeyBinding]
     private let mover: WindowMover
@@ -48,7 +50,10 @@ final class ActionDispatcher {
 
         switch binding.role {
         case .snap:
-            _ = mover.move(window, to: targetAX)
+            let landed = mover.move(window, to: targetAX)
+            if !landed {
+                log.debug("snap did not land near target for pid=\(window.pid, privacy: .public) zone=\(zone.name, privacy: .public)")
+            }
             if let bundleID = window.bundleIdentifier {
                 history?.record(
                     bundleID: bundleID,

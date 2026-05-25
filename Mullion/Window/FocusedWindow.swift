@@ -8,8 +8,9 @@ enum FocusedWindow {
         let appElement = AXUIElementCreateApplication(pid)
         var windowRef: AnyObject?
         guard AXUIElementCopyAttributeValue(appElement, kAXFocusedWindowAttribute as CFString, &windowRef) == .success,
-              let window = windowRef
+              let window = windowRef,
+              CFGetTypeID(window) == AXUIElementGetTypeID()
         else { return nil }
-        return AXWindow(element: window as! AXUIElement, pid: pid)
+        return AXWindow(element: window as! AXUIElement, pid: pid)  // safe: CFGetTypeID == AXUIElementGetTypeID() checked above
     }
 }

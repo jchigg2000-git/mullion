@@ -1,10 +1,12 @@
 import AppKit
 import ApplicationServices
+import os
 
 /// Walks running apps on launch and re-applies the zone resolved by
 /// `PlacementResolver` (AppRule → LearnedPlacement). Apps with no rule and
 /// no history are left alone.
 final class AutoRestore {
+    private let log = Logger(subsystem: "com.mullion.Mullion", category: "auto-restore")
     private let layoutStore: LayoutStore
     private let appRuleStore: AppRuleStore
     private let historyStore: WindowHistoryStore
@@ -48,7 +50,9 @@ final class AutoRestore {
 
                 let targetAppKit = FrameResolver.appKitFrame(for: zone, on: screen)
                 guard let targetAX = Geometry.appKitToAX(targetAppKit) else { continue }
-                _ = mover.move(ax, to: targetAX)
+                if !mover.move(ax, to: targetAX) {
+                    log.debug("auto-restore did not land near target for \(bundleID, privacy: .public) zone=\(zone.name, privacy: .public)")
+                }
             }
         }
     }
