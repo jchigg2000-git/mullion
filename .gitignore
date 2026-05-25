@@ -65,3 +65,6 @@ fastlane/test_output
 *.xcodeproj/
 DerivedData/
 .DS_Store
+
+# Swift code coverage profile artifacts emitted by `xcodebuild test`
+*.profraw
