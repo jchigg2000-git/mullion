@@ -1,0 +1,15 @@
+Mullion
+Copyright (c) 2026 Justin Higgins
+
+This project was designed with reference to the following open-source macOS
+window managers. Their source code and design choices informed Mullion's
+architecture — particularly around the Accessibility API, global hotkey
+handling, and zone snapping behavior. No code from these projects has been
+copied into Mullion; the influence is in approach and lessons learned.
+
+  - Rectangle  — https://github.com/rxhanson/Rectangle  (MIT License)
+  - Loop       — https://github.com/MrKai77/Loop        (GPL-3.0 License)
+  - Amethyst   — https://github.com/ianyh/Amethyst      (MIT License)
+  - yabai      — https://github.com/koekeishiya/yabai   (MIT License)
+
+Thanks to the maintainers and contributors of these projects.
