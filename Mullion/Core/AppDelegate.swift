@@ -9,6 +9,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let appRuleStore = AppRuleStore()
     private let historyStore = WindowHistoryStore()
     private let settingsStore = SettingsStore()
+    private let focusIndex = FocusIndex()
+    private let updaterController = UpdaterController()
 
     private var statusItemController: StatusItemController?
     private var hotkeyManager: HotkeyManager?
@@ -22,11 +24,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = LayoutPickerMenu(
             layoutStore: layoutStore,
             settingsStore: settingsStore,
+            updaterConfigured: updaterController.isConfigured,
             onReload: { [weak self] in self?.reloadAll() },
             onToggleAutoRestore: { [weak self] enabled in
                 self?.settingsStore.autoRestoreEnabled = enabled
             },
             onOpenEditor: { [weak self] in self?.showLayoutEditor() },
+            onCheckForUpdates: { [weak self] in self?.updaterController.checkForUpdates() },
             onQuit: { NSApplication.shared.terminate(nil) }
         )
         statusItemController = StatusItemController(menuBuilder: menu)
@@ -34,7 +38,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let dispatcher = ActionDispatcher(
             layoutStore: layoutStore,
             bindingsProvider: { [bindingStore] in bindingStore.bindings },
-            history: historyStore
+            history: historyStore,
+            focusIndex: focusIndex
         )
         self.dispatcher = dispatcher
 

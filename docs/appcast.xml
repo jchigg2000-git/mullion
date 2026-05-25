@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0"
+     xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"
+     xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Mullion</title>
+    <link>https://github.com/jchigg2000-git/mullion</link>
+    <description>Window manager for ultrawide displays. Auto-update feed.</description>
+    <language>en</language>
+
+    <!--
+      Each release adds an <item> here. `scripts/release.sh` prints a
+      ready-to-paste snippet at the end of every successful run. See
+      docs/release.md for the full process.
+    -->
+
+  </channel>
+</rss>

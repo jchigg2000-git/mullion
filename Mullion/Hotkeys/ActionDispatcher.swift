@@ -1,9 +1,14 @@
 import AppKit
 import os
 
-/// Orchestrates a single hotkey trigger: resolve focused window → pick the
-/// next zone in the cycle → resolve the screen → compute the frame → apply
-/// via mover → record the placement.
+/// Orchestrates a single hotkey trigger.
+///
+/// `.snap` path: focused window → next zone in cycle → screen → frame →
+/// mover → history + FocusIndex writeback.
+///
+/// `.focus` path: next zone in cycle → FocusIndex MRU → raise. The focus
+/// cycle is keyed by binding alone (not by current window) because the
+/// user is rotating through zones, not through windows.
 @MainActor
 final class ActionDispatcher {
     private let log = Logger(subsystem: "com.mullion.Mullion", category: "dispatcher")
@@ -11,6 +16,7 @@ final class ActionDispatcher {
     private let bindingsProvider: () -> [HotkeyBinding]
     private let mover: WindowMover
     private let history: WindowHistoryStore?
+    private let focusIndex: FocusIndex
 
     /// Invoked on the main thread when a chord fires but AX trust is missing.
     /// Without this, every guard in `handle` exits silently and the user sees
@@ -21,16 +27,19 @@ final class ActionDispatcher {
         let windowSignature: String
         let bindingID: UUID
     }
-    private var cycleState: [CycleKey: Int] = [:]
+    private var snapCycleState: [CycleKey: Int] = [:]
+    private var focusCycleState: [UUID: Int] = [:]
 
     init(layoutStore: LayoutStore,
          bindingsProvider: @escaping () -> [HotkeyBinding],
          mover: WindowMover = ChainedWindowMover.default,
-         history: WindowHistoryStore? = nil) {
+         history: WindowHistoryStore? = nil,
+         focusIndex: FocusIndex = FocusIndex()) {
         self.layoutStore = layoutStore
         self.bindingsProvider = bindingsProvider
         self.mover = mover
         self.history = history
+        self.focusIndex = focusIndex
     }
 
     func handle(bindingID: UUID) {
@@ -50,19 +59,31 @@ final class ActionDispatcher {
             log.debug("dispatch aborted: binding has no targets")
             return
         }
+
+        switch binding.role {
+        case .snap:
+            handleSnap(binding: binding)
+        case .focus:
+            handleFocus(binding: binding)
+        }
+    }
+
+    // MARK: Snap
+
+    private func handleSnap(binding: HotkeyBinding) {
         guard let window = FocusedWindow.current() else {
-            log.debug("dispatch aborted: no focused window")
+            log.debug("snap aborted: no focused window")
             return
         }
 
-        let index = advanceCycle(for: window, bindingID: bindingID, count: binding.targets.count)
+        let index = advanceSnapCycle(for: window, bindingID: binding.id, count: binding.targets.count)
         guard binding.targets.indices.contains(index) else {
-            log.debug("dispatch aborted: cycle index out of range")
+            log.debug("snap aborted: cycle index out of range")
             return
         }
         let zoneID = binding.targets[index]
         guard let zone = layoutStore.zone(withID: zoneID) else {
-            log.debug("dispatch aborted: zone not found")
+            log.debug("snap aborted: zone not found")
             return
         }
 
@@ -72,48 +93,72 @@ final class ActionDispatcher {
               let appKitFrame = Geometry.axToAppKit(axFrame),
               let screen = Geometry.screen(containingAppKitRect: appKitFrame)
         else {
-            log.debug("dispatch aborted: could not resolve window frame or screen")
+            log.debug("snap aborted: could not resolve window frame or screen")
             return
         }
 
-        let targetAppKit = FrameResolver.appKitFrame(for: zone, on: screen)
+        let layout = layoutStore.layout(containingZoneID: zoneID)
+        let targetAppKit = FrameResolver.appKitFrame(for: zone, in: layout, on: screen)
         guard let targetAX = Geometry.appKitToAX(targetAppKit) else {
-            log.debug("dispatch aborted: target frame conversion failed")
+            log.debug("snap aborted: target frame conversion failed")
             return
         }
 
-        switch binding.role {
-        case .snap:
-            let landed = mover.move(window, to: targetAX)
-            if !landed {
-                log.debug("snap did not land near target for pid=\(window.pid, privacy: .public) zone=\(zone.name, privacy: .public)")
-            }
-            if let bundleID = window.bundleIdentifier {
-                history?.record(
-                    bundleID: bundleID,
-                    displayUUID: DisplayRegistry.uuid(for: screen),
-                    zoneID: zone.id
-                )
-            }
-        case .focus:
-            // v1 stub: focus role is reserved; no-op until we have a window
-            // index by zone.
-            break
+        let landed = mover.move(window, to: targetAX)
+        if !landed {
+            log.debug("snap did not land near target for pid=\(window.pid, privacy: .public) zone=\(zone.name, privacy: .public)")
         }
+        if let bundleID = window.bundleIdentifier {
+            history?.record(
+                bundleID: bundleID,
+                displayUUID: DisplayRegistry.uuid(for: screen),
+                zoneID: zone.id
+            )
+        }
+        focusIndex.record(window: window, zoneID: zone.id)
     }
 
-    private func advanceCycle(for window: AXWindow, bindingID: UUID, count: Int) -> Int {
+    // MARK: Focus
+
+    private func handleFocus(binding: HotkeyBinding) {
+        let index = advanceFocusCycle(bindingID: binding.id, count: binding.targets.count)
+        guard binding.targets.indices.contains(index) else { return }
+        let zoneID = binding.targets[index]
+
+        guard let window = focusIndex.mostRecentAliveWindow(in: zoneID) else {
+            log.debug("focus: no recorded window in zone \(zoneID, privacy: .public)")
+            return
+        }
+        focusIndex.raise(window)
+    }
+
+    // MARK: Cycle bookkeeping
+
+    private func advanceSnapCycle(for window: AXWindow, bindingID: UUID, count: Int) -> Int {
         guard count > 0 else { return -1 }
         if count == 1 { return 0 }
         let signature = "\(window.pid):\(window.title ?? "")"
         let key = CycleKey(windowSignature: signature, bindingID: bindingID)
         let next: Int
-        if let current = cycleState[key] {
+        if let current = snapCycleState[key] {
             next = (current + 1) % count
         } else {
             next = 0
         }
-        cycleState[key] = next
+        snapCycleState[key] = next
+        return next
+    }
+
+    private func advanceFocusCycle(bindingID: UUID, count: Int) -> Int {
+        guard count > 0 else { return -1 }
+        if count == 1 { return 0 }
+        let next: Int
+        if let current = focusCycleState[bindingID] {
+            next = (current + 1) % count
+        } else {
+            next = 0
+        }
+        focusCycleState[bindingID] = next
         return next
     }
 }

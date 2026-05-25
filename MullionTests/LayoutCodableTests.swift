@@ -123,4 +123,42 @@ final class LayoutCodableTests: XCTestCase {
         let decoded = try JSONDecoder().decode(HotkeyBinding.self, from: data)
         XCTAssertEqual(decoded.targets, ids)
     }
+
+    func test_layout_decodes_withoutMarginOrGap_usesDefaults() throws {
+        // Mimics a layouts.json file written before Phase A — no
+        // outerMargin/innerGap keys present. Decoded Layout should default
+        // both to zero so existing data loads without migration.
+        let json = """
+        {
+          "id": "11111111-1111-1111-1111-111111111111",
+          "name": "Pre-spacing layout",
+          "displayPredicate": { "anyDisplay": {} },
+          "zones": [
+            {
+              "id": "22222222-2222-2222-2222-222222222222",
+              "name": "Full",
+              "x": 0, "y": 0, "width": 1, "height": 1,
+              "anchor": "topLeft"
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let layout = try JSONDecoder().decode(Layout.self, from: json)
+        XCTAssertEqual(layout.outerMargin, .zero)
+        XCTAssertEqual(layout.innerGap, 0)
+        XCTAssertEqual(layout.zones.count, 1)
+    }
+
+    func test_layout_roundTrip_withMarginAndGap() throws {
+        let layout = Layout(
+            name: "Spaced",
+            zones: [Zone(name: "Z", x: 0, y: 0, width: 1, height: 1)],
+            outerMargin: LayoutInsets(top: 8, leading: 4, bottom: 8, trailing: 4),
+            innerGap: 6
+        )
+        let data = try JSONEncoder().encode(layout)
+        let decoded = try JSONDecoder().decode(Layout.self, from: data)
+        XCTAssertEqual(layout, decoded)
+    }
 }

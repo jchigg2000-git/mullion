@@ -124,8 +124,66 @@ struct LayoutEditorView: View {
                     .textFieldStyle(.roundedBorder)
 
                     predicateEditor(copy: copy)
+                    spacingEditor(copy: copy)
                 }
             }
+        }
+    }
+
+    private func spacingEditor(copy: Layout) -> some View {
+        let gapBinding = Binding<Double>(
+            get: { copy.innerGap },
+            set: { newValue in
+                var c = copy
+                c.innerGap = max(0, newValue)
+                model.workingCopy = c
+            }
+        )
+        func marginBinding(_ keyPath: WritableKeyPath<LayoutInsets, Double>) -> Binding<Double> {
+            Binding<Double>(
+                get: { copy.outerMargin[keyPath: keyPath] },
+                set: { newValue in
+                    var c = copy
+                    c.outerMargin[keyPath: keyPath] = max(0, newValue)
+                    model.workingCopy = c
+                }
+            )
+        }
+        return VStack(alignment: .leading, spacing: 6) {
+            Text("Spacing")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            HStack {
+                Text("Inner gap")
+                TextField("0", value: gapBinding, format: .number)
+                    .frame(width: 60)
+                    .textFieldStyle(.roundedBorder)
+                Text("pt").foregroundStyle(.secondary)
+                Spacer()
+            }
+            .help("Symmetric gap between adjacent zones. Edges that touch the layout boundary are not inset; outer spacing comes from the margin below.")
+
+            HStack(spacing: 6) {
+                Text("Margin")
+                Text("T")
+                TextField("0", value: marginBinding(\.top), format: .number)
+                    .frame(width: 44)
+                    .textFieldStyle(.roundedBorder)
+                Text("L")
+                TextField("0", value: marginBinding(\.leading), format: .number)
+                    .frame(width: 44)
+                    .textFieldStyle(.roundedBorder)
+                Text("B")
+                TextField("0", value: marginBinding(\.bottom), format: .number)
+                    .frame(width: 44)
+                    .textFieldStyle(.roundedBorder)
+                Text("R")
+                TextField("0", value: marginBinding(\.trailing), format: .number)
+                    .frame(width: 44)
+                    .textFieldStyle(.roundedBorder)
+            }
+            .help("Outer margin (pt) from the screen's visible frame. Top/Leading/Bottom/Trailing.")
         }
     }
 

@@ -9,7 +9,11 @@ wide and ships layouts, zones, and per-app rules that actually use the
 space — asymmetric zones, 6-pane grids, 1/4-1/2-1/4 splits, and
 center-stage-plus-side-rails configurations.
 
-> ⚠️ **Status:** early development. Not yet ready for daily use.
+> **Status:** beta. The core engine (zone snapping, hotkey cycling, per-app
+> rules, learned placements, auto-restore, SwiftUI layout editor) is shipped.
+> See [docs/design/v1.md](docs/design/v1.md) for the full scope and the
+> remaining build order. Auto-updates via Sparkle once a public release is
+> cut — see [docs/release.md](docs/release.md).
 
 ## Why
 
@@ -20,19 +24,30 @@ that *feels* like a multi-monitor setup — sticky per-zone focus, per-app
 default zones, hotkey snapping, optional gaps, and layouts beyond halves
 and thirds.
 
-## Planned v1 scope
+## v1 scope
 
 - **Zone engine** — user-defined rectangular zones per display, saved as
-  named layouts
-- **Global hotkeys** to snap the focused window to a named zone
-- **Menu-bar app** with a layout picker
+  named layouts. Layout-level outer margins + inner gap.
+- **Global hotkeys** to snap the focused window to a named zone, with
+  cycling and per-zone sticky focus.
+- **Menu-bar app** with a layout picker and a SwiftUI layout editor with
+  live aspect-correct preview.
 - **Ultrawide-first presets** — asymmetric zones, 6-pane, 1/4-1/2-1/4,
-  center-stage + side rails
-- **Multi-display aware** — handles laptop + ultrawide combos cleanly
-- **Permissions flow** — Accessibility prompt handled cleanly on first launch
+  center-stage + side rails.
+- **Multi-display aware** — handles laptop + ultrawide combos cleanly.
+  Arrangement-as-unit configs and per-arrangement default layouts.
+- **Workspaces** — named tuples of layout + per-app placements,
+  optionally arrangement-triggered.
+- **Mouse-driven UX** — drag-to-snap preview overlay and
+  hold-modifier-to-show-grid overlay.
+- **Per-app rules** with a `compatibilityProfile` escape hatch for
+  AX-resistant apps; explicit fallback to Sequoia's `SystemWindowManager`.
+- **Permissions flow** — Accessibility prompt handled cleanly on first
+  launch, re-surfaces if a hotkey fires without trust.
+- **Updates** — Sparkle 2 with EdDSA-signed appcast.
 
-Out of scope for v1: automatic tiling (yabai-style), workspaces, Stage
-Manager integration, drag-to-snap preview UI.
+Out of scope: automatic tiling (yabai-style), Stage Manager integration,
+cloud sync, per-Space layouts.
 
 ## Building
 

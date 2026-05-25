@@ -40,6 +40,12 @@ final class LayoutStore {
         return nil
     }
 
+    /// Returns the layout that contains the given zone ID. Used by
+    /// `FrameResolver` to apply layout-level `outerMargin` / `innerGap`.
+    func layout(containingZoneID id: UUID) -> Layout? {
+        store.value.layouts.first { $0.zones.contains(where: { $0.id == id }) }
+    }
+
     /// Loads `DefaultLayouts.json` from the app bundle. Empty array when run
     /// outside a bundle (unit tests).
     static func bundledDefaults() -> [Layout] {

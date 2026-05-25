@@ -6,22 +6,28 @@ import AppKit
 final class LayoutPickerMenu: NSObject {
     private let layoutStore: LayoutStore
     private let settingsStore: SettingsStore
+    private let updaterConfigured: Bool
     private let onReload: () -> Void
     private let onToggleAutoRestore: (Bool) -> Void
     private let onOpenEditor: () -> Void
+    private let onCheckForUpdates: () -> Void
     private let onQuit: () -> Void
 
     init(layoutStore: LayoutStore,
          settingsStore: SettingsStore,
+         updaterConfigured: Bool,
          onReload: @escaping () -> Void,
          onToggleAutoRestore: @escaping (Bool) -> Void,
          onOpenEditor: @escaping () -> Void,
+         onCheckForUpdates: @escaping () -> Void,
          onQuit: @escaping () -> Void) {
         self.layoutStore = layoutStore
         self.settingsStore = settingsStore
+        self.updaterConfigured = updaterConfigured
         self.onReload = onReload
         self.onToggleAutoRestore = onToggleAutoRestore
         self.onOpenEditor = onOpenEditor
+        self.onCheckForUpdates = onCheckForUpdates
         self.onQuit = onQuit
     }
 
@@ -85,6 +91,16 @@ final class LayoutPickerMenu: NSObject {
 
         menu.addItem(.separator())
 
+        if updaterConfigured {
+            let updates = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdatesAction), keyEquivalent: "")
+            updates.target = self
+            menu.addItem(updates)
+        } else {
+            let updates = NSMenuItem(title: "Updates not configured", action: nil, keyEquivalent: "")
+            updates.isEnabled = false
+            menu.addItem(updates)
+        }
+
         let quit = NSMenuItem(title: "Quit Mullion", action: #selector(quitAction), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
@@ -104,6 +120,10 @@ final class LayoutPickerMenu: NSObject {
 
     @objc private func revealConfig() {
         NSWorkspace.shared.activateFileViewerSelecting([ApplicationSupport.directory])
+    }
+
+    @objc private func checkForUpdatesAction() {
+        onCheckForUpdates()
     }
 
     @objc private func quitAction() {

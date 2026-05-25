@@ -32,5 +32,11 @@
 	<false/>
 	<key>NSSupportsSuddenTermination</key>
 	<false/>
+	<key>SUFeedURL</key>
+	<string>https://jchigg2000-git.github.io/mullion/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>oygksZFoPUioT7fCIpjr/WDtdH/3z4CbuPT249aCx3E=</string>
+	<key>SUEnableInstallerLauncherService</key>
+	<true/>
 </dict>
 </plist>

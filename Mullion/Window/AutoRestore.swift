@@ -48,7 +48,8 @@ final class AutoRestore {
                       let zone = resolver.resolveZone(bundleID: bundleID, on: screen)
                 else { continue }
 
-                let targetAppKit = FrameResolver.appKitFrame(for: zone, on: screen)
+                let layout = layoutStore.layout(containingZoneID: zone.id)
+                let targetAppKit = FrameResolver.appKitFrame(for: zone, in: layout, on: screen)
                 guard let targetAX = Geometry.appKitToAX(targetAppKit) else { continue }
                 if !mover.move(ax, to: targetAX) {
                     log.debug("auto-restore did not land near target for \(bundleID, privacy: .public) zone=\(zone.name, privacy: .public)")
