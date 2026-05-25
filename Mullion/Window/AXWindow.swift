@@ -35,7 +35,7 @@ struct AXWindow {
               let raw = value,
               CFGetTypeID(raw) == AXValueGetTypeID()
         else { return nil }
-        let axValue = raw as! AXValue
+        let axValue = raw as! AXValue  // safe: CFGetTypeID == AXValueGetTypeID() checked above
         var point = CGPoint.zero
         AXValueGetValue(axValue, .cgPoint, &point)
         return point
@@ -47,7 +47,7 @@ struct AXWindow {
               let raw = value,
               CFGetTypeID(raw) == AXValueGetTypeID()
         else { return nil }
-        let axValue = raw as! AXValue
+        let axValue = raw as! AXValue  // safe: CFGetTypeID == AXValueGetTypeID() checked above
         var size = CGSize.zero
         AXValueGetValue(axValue, .cgSize, &size)
         return size

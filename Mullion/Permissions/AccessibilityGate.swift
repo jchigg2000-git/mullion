@@ -25,7 +25,7 @@ final class AccessibilityGate {
     /// Triggers the system Accessibility prompt and returns current trust state.
     @discardableResult
     func prompt() -> Bool {
-        let opts = [kAXTrustedCheckOptionPrompt.takeRetainedValue() as String: true] as CFDictionary
+        let opts = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         return AXIsProcessTrustedWithOptions(opts)
     }
 

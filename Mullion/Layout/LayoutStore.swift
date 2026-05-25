@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 final class LayoutStore {
     private let store: JSONStore<LayoutCatalog>
@@ -42,10 +43,16 @@ final class LayoutStore {
     /// Loads `DefaultLayouts.json` from the app bundle. Empty array when run
     /// outside a bundle (unit tests).
     static func bundledDefaults() -> [Layout] {
-        guard let url = Bundle.main.url(forResource: "DefaultLayouts", withExtension: "json"),
-              let data = try? Data(contentsOf: url),
-              let catalog = try? JSONDecoder().decode(LayoutCatalog.self, from: data)
-        else { return [] }
-        return catalog.layouts
+        guard let url = Bundle.main.url(forResource: "DefaultLayouts", withExtension: "json") else {
+            return []
+        }
+        do {
+            let data = try Data(contentsOf: url)
+            return try JSONDecoder().decode(LayoutCatalog.self, from: data).layouts
+        } catch {
+            Logger(subsystem: "com.mullion.Mullion", category: "layout-store")
+                .error("Failed to load bundled DefaultLayouts.json: \(error.localizedDescription, privacy: .public)")
+            return []
+        }
     }
 }
