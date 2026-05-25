@@ -40,3 +40,15 @@ Decisions made while building v1 that weren't explicit in the design doc.
 
 - **Origin-zero screen is computed once per geometry call**, not cached. The set of screens can change at any notification; safer to look up each time.
 - **`Geometry.appKitToAX` returns nil if there is no origin-zero screen.** Caller must handle (means no displays — degenerate case).
+
+## Default bindings seeder
+
+- **First-run only**, gated by `UserDefaults.standard.bool(forKey: "Mullion.didSeedDefaultBindings")`. Skips if `bindings.json` already has entries.
+- Writes both halves of the binding state: the `HotkeyBinding` row in `bindings.json` (data layer) AND the actual key combo via `KeyboardShortcuts.setShortcut` (library's UserDefaults). Without the second call, names exist but no keys fire.
+- Defaults ship as `⌃⌥←/→/↑` for halves+maximize and `⌃⌥1-6` for the 6-pane cells. **Why:** these chord prefixes have low collision risk with system and common app shortcuts.
+
+## Dev workflow gotchas (Sequoia)
+
+- **Launch via `open /Applications/Mullion.app`, not by executing the binary directly from a shell.** TCC's "responsible process" model attributes shell-launched binaries to the terminal's identity (e.g., iTerm). The grant on Mullion is correctly recorded but enforced against the terminal, so `AXIsProcessTrusted()` returns false even after a valid grant.
+- **AX grants are invalidated by every rebuild** for ad-hoc-signed dev builds — TCC keys on the binary's cdhash. Workflow: `tccutil reset Accessibility com.mullion.Mullion` after each rebuild, then re-add via System Settings. A proper Developer ID signature would stabilize this; deferred until release-engineering work.
+- **Install location matters.** Grants from `DerivedData/Build/Products/Debug/` paths can be flaky on Sequoia. Copy the built `.app` to `/Applications/` and grant from there.

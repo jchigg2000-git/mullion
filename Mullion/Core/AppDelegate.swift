@@ -36,6 +36,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         self.dispatcher = dispatcher
 
+        DefaultBindingsSeeder.seedIfNeeded(bindingStore: bindingStore, layoutStore: layoutStore)
+
         let hotkeys = HotkeyManager()
         hotkeys.onTrigger = { [weak dispatcher] id in dispatcher?.handle(bindingID: id) }
         hotkeys.register(bindingStore.bindings)
