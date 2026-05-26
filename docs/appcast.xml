@@ -14,5 +14,18 @@
       docs/release.md for the full process.
     -->
 
+    <item>
+      <title>Mullion 1.0.0</title>
+      <pubDate>Tue, 26 May 2026 18:42:25 +0000</pubDate>
+      <sparkle:version>1.0.0</sparkle:version>
+      <sparkle:shortVersionString>1.0.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+      <enclosure
+        url="https://github.com/jchigg2000-git/mullion/releases/download/v1.0.0/Mullion-1.0.0.dmg"
+        length="2790968"
+        type="application/octet-stream"
+        sparkle:edSignature="U2bPuu/juiXlgCx966m62Mb/Y4eiVzLFr6dDqHEUKPO+1VbDDsyVpYufZTSY4yZ7y1EWQIHuMOt3p9Sx96O2DA==" />
+    </item>
+
   </channel>
 </rss>
