@@ -50,7 +50,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: Mullion/Resources/Mullion.entitlements
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks"
         COMBINE_HIDPI_IMAGES: YES
-        MARKETING_VERSION: "0.1.0"
+        MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"
 
   MullionTests:
