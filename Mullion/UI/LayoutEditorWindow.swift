@@ -10,7 +10,7 @@ final class LayoutEditorWindow: NSWindowController, NSWindowDelegate {
     init(model: LayoutEditorModel) {
         self.model = model
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 960, height: 640),
+            contentRect: NSRect(x: 0, y: 0, width: 1280, height: 820),
             styleMask: [.titled, .closable, .resizable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -18,7 +18,7 @@ final class LayoutEditorWindow: NSWindowController, NSWindowDelegate {
         window.title = "Mullion Layout Editor"
         window.center()
         window.isReleasedWhenClosed = false
-        window.minSize = NSSize(width: 880, height: 560)
+        window.minSize = NSSize(width: 1040, height: 640)
         super.init(window: window)
         window.delegate = self
         window.contentView = NSHostingView(rootView: LayoutEditorView(model: model))

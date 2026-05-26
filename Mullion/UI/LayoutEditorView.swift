@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import KeyboardShortcuts
 
 struct LayoutEditorView: View {
     @Bindable var model: LayoutEditorModel
@@ -10,7 +11,7 @@ struct LayoutEditorView: View {
     var body: some View {
         NavigationSplitView {
             sidebar
-                .navigationSplitViewColumnWidth(min: 180, ideal: 220)
+                .navigationSplitViewColumnWidth(min: 220, ideal: 260)
         } detail: {
             if model.workingCopy != nil {
                 detail
@@ -22,7 +23,7 @@ struct LayoutEditorView: View {
                 )
             }
         }
-        .frame(minWidth: 880, minHeight: 560)
+        .frame(minWidth: 1040, minHeight: 640)
         .confirmationDialog(
             "Zone is bound to hotkey(s)",
             isPresented: $showingDeleteZoneWarning,
@@ -56,11 +57,14 @@ struct LayoutEditorView: View {
                     }
                     .tag(Optional(layout.id))
                 }
+                .onMove { source, destination in
+                    model.moveLayouts(from: source, to: destination)
+                }
             }
 
             Divider()
 
-            HStack {
+            HStack(spacing: 4) {
                 Button {
                     model.newLayout()
                 } label: {
@@ -79,6 +83,24 @@ struct LayoutEditorView: View {
                 .help("Delete selected layout")
 
                 Spacer()
+
+                Button {
+                    model.moveSelectedLayout(direction: .up)
+                } label: {
+                    Image(systemName: "chevron.up")
+                }
+                .buttonStyle(.borderless)
+                .disabled(!model.canMoveSelectedLayout.up)
+                .help("Move layout up — first match wins for ⌥⌃1..0")
+
+                Button {
+                    model.moveSelectedLayout(direction: .down)
+                } label: {
+                    Image(systemName: "chevron.down")
+                }
+                .buttonStyle(.borderless)
+                .disabled(!model.canMoveSelectedLayout.down)
+                .help("Move layout down")
             }
             .padding(8)
         }
@@ -252,9 +274,27 @@ struct LayoutEditorView: View {
 
     private var zoneList: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
+            HStack(spacing: 4) {
                 Text("Zones").font(.headline)
                 Spacer()
+                Button {
+                    model.moveSelectedZone(direction: .up)
+                } label: {
+                    Image(systemName: "chevron.up")
+                }
+                .buttonStyle(.borderless)
+                .disabled(!model.canMoveSelectedZone.up)
+                .help("Move zone up — changes ⌥⌃ number assignment")
+
+                Button {
+                    model.moveSelectedZone(direction: .down)
+                } label: {
+                    Image(systemName: "chevron.down")
+                }
+                .buttonStyle(.borderless)
+                .disabled(!model.canMoveSelectedZone.down)
+                .help("Move zone down")
+
                 Button {
                     model.addZone()
                 } label: {
@@ -288,14 +328,28 @@ struct LayoutEditorView: View {
                         .foregroundStyle(.secondary)
                         .font(.caption)
                 } else {
-                    ForEach(copy.zones) { zone in
+                    ForEach(Array(copy.zones.enumerated()), id: \.element.id) { index, zone in
                         Button {
                             model.selectedZoneID = zone.id
                         } label: {
-                            HStack {
-                                Circle()
-                                    .fill(zone.id == model.selectedZoneID ? Color.accentColor : Color.secondary.opacity(0.4))
-                                    .frame(width: 8, height: 8)
+                            HStack(spacing: 6) {
+                                if let key = ZoneIndexKey.label(for: index) {
+                                    Text(key)
+                                        .font(.system(.caption2, design: .monospaced).weight(.bold))
+                                        .foregroundStyle(.white)
+                                        .frame(minWidth: 14)
+                                        .padding(.horizontal, 4)
+                                        .padding(.vertical, 1)
+                                        .background(
+                                            Capsule().fill(zone.id == model.selectedZoneID
+                                                ? Color.accentColor
+                                                : Color.accentColor.opacity(0.6))
+                                        )
+                                } else {
+                                    Circle()
+                                        .fill(zone.id == model.selectedZoneID ? Color.accentColor : Color.secondary.opacity(0.4))
+                                        .frame(width: 8, height: 8)
+                                }
                                 Text(zone.name)
                                 Spacer()
                                 Text(zoneSummary(zone))
@@ -365,6 +419,8 @@ struct LayoutEditorView: View {
                         }
                     }
 
+                    hotkeyRecorder(for: id)
+
                     Toggle("Pixel-pinned size", isOn: Binding(
                         get: { zone.sizeOverride != nil },
                         set: { on in
@@ -408,6 +464,35 @@ struct LayoutEditorView: View {
                 Text("Pick a zone above to edit it.")
                     .foregroundStyle(.secondary)
                     .font(.caption)
+            }
+        }
+    }
+
+    private func hotkeyRecorder(for zoneID: Zone.ID) -> some View {
+        let name = KeyboardShortcuts.Name(model.shortcutName(forZoneID: zoneID))
+        let otherBindings = model
+            .bindingsReferencing(zoneID: zoneID)
+            .filter { $0.shortcutName != name.rawValue }
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("Hotkey")
+                // .id(zoneID) forces SwiftUI to tear down and rebuild the
+                // underlying NSViewRepresentable on zone selection change.
+                // Recorder captures `onChange` once in makeNSView and never
+                // refreshes it, so without this the closure would close over a
+                // stale zoneID and write to the wrong zone's binding.
+                KeyboardShortcuts.Recorder(for: name) { newShortcut in
+                    model.applyShortcut(forZoneID: zoneID, hasShortcut: newShortcut != nil)
+                }
+                .id(zoneID)
+            }
+            if !otherBindings.isEmpty {
+                // Seeded multi-target / cycle bindings target this zone too;
+                // they're configured outside this Recorder. Surface them so
+                // the user knows there's another path firing into this zone.
+                Text("Also bound by: \(otherBindings.map { $0.shortcutName }.joined(separator: ", "))")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
         }
     }

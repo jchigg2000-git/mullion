@@ -12,7 +12,14 @@ settings:
     SWIFT_VERSION: "5.10"
     MACOSX_DEPLOYMENT_TARGET: "15.0"
     ENABLE_HARDENED_RUNTIME: YES
-    CODE_SIGN_STYLE: Automatic
+    # Sign every build (Debug and Release) with the same Developer ID
+    # identity so macOS TCC keys Accessibility permission to the stable
+    # Designated Requirement (anchor apple generic + Team ID + bundle ID).
+    # One grant carries forward across all rebuilds; ad-hoc signing would
+    # produce a new TCC entry every time and force re-granting.
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "Developer ID Application"
+    DEVELOPMENT_TEAM: "34RWZN7B74"
     DEAD_CODE_STRIPPING: YES
     SWIFT_TREAT_WARNINGS_AS_ERRORS: NO
     GCC_TREAT_WARNINGS_AS_ERRORS: NO

@@ -9,7 +9,9 @@ import Observation
 @Observable
 final class LayoutEditorModel {
     private let layoutStore: LayoutStore
+    private let bindingStore: BindingStore?
     private let bindingsProvider: () -> [HotkeyBinding]
+    private let onBindingsChanged: (() -> Void)?
 
     /// All layouts as currently persisted (refreshed on save / revert / external reload).
     private(set) var layouts: [Layout]
@@ -37,9 +39,13 @@ final class LayoutEditorModel {
     private let previousOnChange: (() -> Void)?
 
     init(layoutStore: LayoutStore,
-         bindingsProvider: @escaping () -> [HotkeyBinding] = { [] }) {
+         bindingStore: BindingStore? = nil,
+         bindingsProvider: @escaping () -> [HotkeyBinding] = { [] },
+         onBindingsChanged: (() -> Void)? = nil) {
         self.layoutStore = layoutStore
+        self.bindingStore = bindingStore
         self.bindingsProvider = bindingsProvider
+        self.onBindingsChanged = onBindingsChanged
         self.layouts = layoutStore.layouts
         self.screens = DisplayRegistry.shared.screens
         self.selection = layoutStore.layouts.first?.id
@@ -119,6 +125,64 @@ final class LayoutEditorModel {
         selectedZoneID = layout.zones.first?.id
     }
 
+    /// Drag-to-reorder. Order matters: snap-by-index resolves to the first
+    /// layout whose displayPredicate matches the screen.
+    func moveLayouts(from source: IndexSet, to destination: Int) {
+        var copy = layouts
+        copy.move(fromOffsets: source, toOffset: destination)
+        layoutStore.replaceLayouts(copy)
+        layouts = layoutStore.layouts
+    }
+
+    /// Shift the selected layout one slot toward `direction`. Used by the
+    /// ↑↓ buttons in the sidebar. No-op when no selection or already at the
+    /// boundary in that direction.
+    func moveSelectedLayout(direction: ReorderDirection) {
+        guard let id = selection,
+              let idx = layouts.firstIndex(where: { $0.id == id }) else { return }
+        let target = idx + direction.delta
+        guard layouts.indices.contains(target) else { return }
+        var copy = layouts
+        copy.swapAt(idx, target)
+        layoutStore.replaceLayouts(copy)
+        layouts = layoutStore.layouts
+    }
+
+    var canMoveSelectedLayout: (up: Bool, down: Bool) {
+        guard let id = selection,
+              let idx = layouts.firstIndex(where: { $0.id == id }) else {
+            return (false, false)
+        }
+        return (up: idx > 0, down: idx < layouts.count - 1)
+    }
+
+    /// Shift the selected zone within the working copy. Reordering zones
+    /// changes their ⌥⌃ key index (zone[0] = ⌥⌃1, etc.), so this is also
+    /// how the user remaps which zone gets which number.
+    func moveSelectedZone(direction: ReorderDirection) {
+        guard var copy = workingCopy,
+              let id = selectedZoneID,
+              let idx = copy.zones.firstIndex(where: { $0.id == id }) else { return }
+        let target = idx + direction.delta
+        guard copy.zones.indices.contains(target) else { return }
+        copy.zones.swapAt(idx, target)
+        workingCopy = copy
+    }
+
+    var canMoveSelectedZone: (up: Bool, down: Bool) {
+        guard let copy = workingCopy,
+              let id = selectedZoneID,
+              let idx = copy.zones.firstIndex(where: { $0.id == id }) else {
+            return (false, false)
+        }
+        return (up: idx > 0, down: idx < copy.zones.count - 1)
+    }
+
+    enum ReorderDirection {
+        case up, down
+        var delta: Int { self == .up ? -1 : 1 }
+    }
+
     func deleteSelectedLayout() {
         guard let id = selection else { return }
         layoutStore.remove(layoutWithID: id)
@@ -161,6 +225,27 @@ final class LayoutEditorModel {
     /// destructive edits. Empty when no bindings reference the zone.
     func bindingsReferencing(zoneID: Zone.ID) -> [HotkeyBinding] {
         bindingsProvider().filter { $0.targets.contains(zoneID) }
+    }
+
+    /// Stable per-zone shortcut name for the user-managed Recorder slot.
+    /// Lives in its own namespace so seeded multi-target / cycle bindings
+    /// (e.g. `mullion.leftHalf`) keep working alongside.
+    func shortcutName(forZoneID zoneID: Zone.ID) -> String {
+        "mullion.zone.\(zoneID.uuidString)"
+    }
+
+    /// Called from the Recorder's onChange. Upserts or removes the snap
+    /// binding to match the current shortcut state, then asks the host to
+    /// re-register hotkeys.
+    func applyShortcut(forZoneID zoneID: Zone.ID, hasShortcut: Bool) {
+        guard let bindingStore else { return }
+        let name = shortcutName(forZoneID: zoneID)
+        if hasShortcut {
+            bindingStore.setSnapBinding(forZoneID: zoneID, shortcutName: name)
+        } else {
+            bindingStore.removeSnapBinding(forZoneID: zoneID, shortcutName: name)
+        }
+        onBindingsChanged?()
     }
 
     func deleteSelectedZone() {

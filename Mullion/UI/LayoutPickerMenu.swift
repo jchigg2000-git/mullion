@@ -1,8 +1,9 @@
 import AppKit
 
-/// Builds the menu-bar dropdown. In v1 the layout list is informational —
-/// snapping happens via hotkey. The menu provides Reload, Auto-restore
-/// toggle, and Quit.
+/// Builds the menu-bar dropdown. Each layout expands into a submenu of its
+/// zones; clicking a zone snaps the focused window into it — the same code
+/// path a hotkey would take, but reachable without a binding (e.g. for
+/// user-created layouts whose zones nothing is bound to yet).
 final class LayoutPickerMenu: NSObject {
     private let layoutStore: LayoutStore
     private let settingsStore: SettingsStore
@@ -10,6 +11,7 @@ final class LayoutPickerMenu: NSObject {
     private let onReload: () -> Void
     private let onToggleAutoRestore: (Bool) -> Void
     private let onOpenEditor: () -> Void
+    private let onSnapToZone: (UUID) -> Void
     private let onCheckForUpdates: () -> Void
     private let onQuit: () -> Void
 
@@ -19,6 +21,7 @@ final class LayoutPickerMenu: NSObject {
          onReload: @escaping () -> Void,
          onToggleAutoRestore: @escaping (Bool) -> Void,
          onOpenEditor: @escaping () -> Void,
+         onSnapToZone: @escaping (UUID) -> Void,
          onCheckForUpdates: @escaping () -> Void,
          onQuit: @escaping () -> Void) {
         self.layoutStore = layoutStore
@@ -27,6 +30,7 @@ final class LayoutPickerMenu: NSObject {
         self.onReload = onReload
         self.onToggleAutoRestore = onToggleAutoRestore
         self.onOpenEditor = onOpenEditor
+        self.onSnapToZone = onSnapToZone
         self.onCheckForUpdates = onCheckForUpdates
         self.onQuit = onQuit
     }
@@ -55,16 +59,9 @@ final class LayoutPickerMenu: NSObject {
             menu.addItem(empty)
         } else {
             for layout in layoutStore.layouts {
-                let item = NSMenuItem(title: "  \(layout.name)", action: nil, keyEquivalent: "")
-                item.isEnabled = false
-                let zonesItem = NSMenuItem(
-                    title: "    \(layout.zones.count) zones",
-                    action: nil,
-                    keyEquivalent: ""
-                )
-                zonesItem.isEnabled = false
-                menu.addItem(item)
-                menu.addItem(zonesItem)
+                let layoutItem = NSMenuItem(title: layout.name, action: nil, keyEquivalent: "")
+                layoutItem.submenu = buildZoneSubmenu(for: layout)
+                menu.addItem(layoutItem)
             }
         }
 
@@ -104,6 +101,32 @@ final class LayoutPickerMenu: NSObject {
         let quit = NSMenuItem(title: "Quit Mullion", action: #selector(quitAction), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
+    }
+
+    private func buildZoneSubmenu(for layout: Layout) -> NSMenu {
+        let submenu = NSMenu(title: layout.name)
+        if layout.zones.isEmpty {
+            let empty = NSMenuItem(title: "No zones", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            submenu.addItem(empty)
+        } else {
+            for zone in layout.zones {
+                let item = NSMenuItem(
+                    title: zone.name,
+                    action: #selector(snapToZoneAction(_:)),
+                    keyEquivalent: ""
+                )
+                item.target = self
+                item.representedObject = zone.id
+                submenu.addItem(item)
+            }
+        }
+        return submenu
+    }
+
+    @objc private func snapToZoneAction(_ sender: NSMenuItem) {
+        guard let zoneID = sender.representedObject as? UUID else { return }
+        onSnapToZone(zoneID)
     }
 
     @objc private func reloadAction() {

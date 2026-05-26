@@ -31,6 +31,16 @@ final class LayoutStore {
         }
     }
 
+    /// Replace the entire layout list. Used by the editor's drag-to-reorder.
+    /// Order is load-bearing: snap-by-index resolves to the first layout
+    /// whose displayPredicate matches the screen, so reordering controls
+    /// which layout wins on overlapping predicates.
+    func replaceLayouts(_ layouts: [Layout]) {
+        store.update { catalog in
+            catalog.layouts = layouts
+        }
+    }
+
     func zone(withID id: UUID) -> Zone? {
         for layout in store.value.layouts {
             if let zone = layout.zones.first(where: { $0.id == id }) {

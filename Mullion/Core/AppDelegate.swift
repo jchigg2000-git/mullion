@@ -1,6 +1,7 @@
 import AppKit
 import os
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let log = Logger(subsystem: "com.mullion.Mullion", category: "lifecycle")
 
@@ -30,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.settingsStore.autoRestoreEnabled = enabled
             },
             onOpenEditor: { [weak self] in self?.showLayoutEditor() },
+            onSnapToZone: { [weak self] zoneID in self?.dispatcher?.snap(toZoneID: zoneID) },
             onCheckForUpdates: { [weak self] in self?.updaterController.checkForUpdates() },
             onQuit: { NSApplication.shared.terminate(nil) }
         )
@@ -51,6 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let hotkeys = HotkeyManager()
         hotkeys.onTrigger = { [weak dispatcher] id in dispatcher?.handle(bindingID: id) }
+        hotkeys.onIndexTrigger = { [weak dispatcher] index in dispatcher?.snapByIndex(index) }
         hotkeys.register(bindingStore.bindings)
         self.hotkeyManager = hotkeys
 
@@ -104,7 +107,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let model = LayoutEditorModel(
             layoutStore: layoutStore,
-            bindingsProvider: { [bindingStore] in bindingStore.bindings }
+            bindingStore: bindingStore,
+            bindingsProvider: { [bindingStore] in bindingStore.bindings },
+            onBindingsChanged: { [weak self] in
+                guard let self else { return }
+                self.hotkeyManager?.register(self.bindingStore.bindings)
+            }
         )
         let window = LayoutEditorWindow(model: model)
         window.show()

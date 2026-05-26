@@ -81,7 +81,64 @@ final class ActionDispatcher {
             log.debug("snap aborted: cycle index out of range")
             return
         }
-        let zoneID = binding.targets[index]
+        snap(window: window, toZoneID: binding.targets[index])
+    }
+
+    /// Public entry for ⌥⌃1..⌥⌃0: snap focused window into the Nth zone of
+    /// whichever layout's displayPredicate matches the screen the focused
+    /// window currently occupies. `index1Based` is 1-based; 10 maps to the
+    /// physical "0" key on the number row.
+    func snapByIndex(_ index1Based: Int) {
+        guard AccessibilityGate.shared.isTrusted else {
+            log.notice("snapByIndex aborted: AX trust missing; surfacing onboarding")
+            onAccessibilityRequired?()
+            return
+        }
+        guard let window = FocusedWindow.current() else {
+            log.debug("snapByIndex aborted: no focused window")
+            return
+        }
+        guard let axFrame = window.axFrame,
+              let appKitFrame = Geometry.axToAppKit(axFrame),
+              let screen = Geometry.screen(containingAppKitRect: appKitFrame)
+        else {
+            log.debug("snapByIndex aborted: could not resolve focused window screen")
+            return
+        }
+        let screenUUID = DisplayRegistry.uuid(for: screen)
+        let aspect = Double(screen.frame.width / screen.frame.height)
+        guard let layout = layoutStore.layouts.first(where: {
+            $0.displayPredicate.matches(uuid: screenUUID, aspectRatio: aspect)
+        }) else {
+            log.debug("snapByIndex aborted: no layout matches current screen (aspect=\(aspect, privacy: .public))")
+            return
+        }
+        let zoneIdx = index1Based - 1
+        guard layout.zones.indices.contains(zoneIdx) else {
+            log.debug("snapByIndex: layout '\(layout.name, privacy: .public)' has \(layout.zones.count, privacy: .public) zones, requested \(index1Based, privacy: .public)")
+            return
+        }
+        snap(window: window, toZoneID: layout.zones[zoneIdx].id)
+    }
+
+    /// Public one-shot entry: snap the focused window into a specific zone.
+    /// Used by menu-bar clicks where there's no hotkey binding and no cycle.
+    /// Re-checks AX trust because callers outside `handle(bindingID:)` aren't
+    /// gated.
+    func snap(toZoneID zoneID: UUID) {
+        guard AccessibilityGate.shared.isTrusted else {
+            log.notice("snap aborted: AX trust missing; surfacing onboarding")
+            onAccessibilityRequired?()
+            return
+        }
+        guard let window = FocusedWindow.current() else {
+            log.debug("snap aborted: no focused window")
+            return
+        }
+        snap(window: window, toZoneID: zoneID)
+    }
+
+    private func snap(window: AXWindow, toZoneID zoneID: UUID) {
         guard let zone = layoutStore.zone(withID: zoneID) else {
             log.debug("snap aborted: zone not found")
             return

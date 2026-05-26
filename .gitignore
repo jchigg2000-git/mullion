@@ -65,6 +65,9 @@ fastlane/test_output
 *.xcodeproj/
 DerivedData/
 build/
+# scripts/release.sh writes the archive, exported app, DMG, and Sparkle
+# signing intermediates here. `make clean` empties it.
+release-build/
 .DS_Store
 
 # Swift code coverage profile artifacts emitted by `xcodebuild test`

@@ -1,5 +1,19 @@
 import SwiftUI
 
+/// Maps a zone's 0-based array index to the ⌥⌃ number-row key that snaps
+/// to it (see `HotkeyManager.indexedNames` and
+/// `ActionDispatcher.snapByIndex(_:)`). 0..8 → "1".."9"; 9 → "0"; 10+ has
+/// no built-in key (use the per-zone Recorder).
+enum ZoneIndexKey {
+    static func label(for index: Int) -> String? {
+        switch index {
+        case 0...8: return String(index + 1)
+        case 9:     return "0"
+        default:    return nil
+        }
+    }
+}
+
 /// Renders a layout's zones inside a rectangle that matches the target
 /// display's aspect ratio. Pure SwiftUI top-left coordinate space — no
 /// Y-flip needed because `Zone` is already top-left (FrameResolver is the
@@ -38,8 +52,9 @@ struct LivePreviewView: View {
                     .offset(x: originX, y: originY)
 
                 if let layout {
-                    ForEach(layout.zones) { zone in
+                    ForEach(Array(layout.zones.enumerated()), id: \.element.id) { index, zone in
                         zoneView(zone: zone,
+                                 index: index,
                                  surface: fitted,
                                  originX: originX,
                                  originY: originY,
@@ -62,6 +77,7 @@ struct LivePreviewView: View {
     }
 
     private func zoneView(zone: Zone,
+                          index: Int,
                           surface: CGSize,
                           originX: CGFloat,
                           originY: CGFloat,
@@ -90,10 +106,23 @@ struct LivePreviewView: View {
                         )
                 )
 
-            Text(zone.name)
-                .font(.caption2)
-                .foregroundStyle(selected ? Color.accentColor : .secondary)
-                .padding(4)
+            HStack(spacing: 5) {
+                if let key = ZoneIndexKey.label(for: index) {
+                    Text(key)
+                        .font(.system(.caption2, design: .monospaced).weight(.bold))
+                        .foregroundStyle(.white)
+                        .frame(minWidth: 14)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(
+                            Capsule().fill(Color.accentColor.opacity(selected ? 1.0 : 0.75))
+                        )
+                }
+                Text(zone.name)
+                    .font(.caption2)
+                    .foregroundStyle(selected ? Color.accentColor : .secondary)
+            }
+            .padding(4)
 
             if let override = zone.sizeOverride {
                 anchoredOverride(zone: zone,
