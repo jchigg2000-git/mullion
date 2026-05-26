@@ -55,6 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.layoutStore.layouts.first { $0.id == id }?.name
             } ?? "—"
             self.log.notice("arrangement '\(arrangement.name, privacy: .public)' matched (default layout: \(layoutName, privacy: .public))")
+            self.autoRestoreBoundWorkspaces(for: arrangement)
         }
         arrangementRegistry.onUnknown = { [weak self] signature in
             self?.log.notice("unknown display arrangement (\(signature.count, privacy: .public) display(s)) — open the editor to save it")
@@ -160,7 +161,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 historyStore: historyStore,
                 mover: ChainedWindowMover.default
             ).run()
+            // The launch-time `recompute()` above ran before the onMatched
+            // callback was installed, so it didn't dispatch workspace
+            // auto-restore. Cover the launch case explicitly here, alongside
+            // the existing AppRule/Learned auto-restore.
+            if let match = arrangementRegistry.currentMatch {
+                autoRestoreBoundWorkspaces(for: match)
+            }
         }
+    }
+
+    /// Restore the workspace bound to `arrangement` if any. Gated by
+    /// `autoRestoreEnabled` + AX trust so the callback can fire from
+    /// arbitrary display-change events without surprising the user when
+    /// either gate is off. When multiple workspaces are bound to the same
+    /// arrangement (legal but ambiguous), the most-recently-captured one
+    /// wins — `capturedAt` is the most defensible tiebreaker.
+    private func autoRestoreBoundWorkspaces(for arrangement: Arrangement) {
+        guard settingsStore.autoRestoreEnabled,
+              AccessibilityGate.shared.isTrusted else { return }
+        let bound = workspaceStore.workspaces.filter { $0.arrangementID == arrangement.id }
+        guard let target = bound.max(by: { $0.capturedAt < $1.capturedAt }) else { return }
+        workspaceController.restore(target)
+        log.notice("auto-restored workspace '\(target.name, privacy: .public)' on arrangement match")
     }
 
     private func showOnboardingIfNeeded() {

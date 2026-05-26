@@ -15,6 +15,13 @@ struct WorkspacesEditorView: View {
         let total: Int
     }
 
+    /// Sentinel UUID for the "None" entry in the arrangement-binding Picker.
+    /// SwiftUI Picker can't carry `nil` through `Binding<UUID>`; same trick
+    /// `ArrangementsEditorView` uses for the default-layout dropdown.
+    private static let noneArrangementSentinel = UUID(
+        uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    )
+
     private var workspace: Workspace? {
         model.workspaces.first { $0.id == workspaceID }
     }
@@ -35,6 +42,7 @@ struct WorkspacesEditorView: View {
                         }
 
                         nameSection(workspace: workspace)
+                        bindingSection(workspace: workspace)
                         actionSection(workspace: workspace)
                         itemsSection(workspace: workspace)
                         descriptionSection(workspace: workspace)
@@ -68,6 +76,47 @@ struct WorkspacesEditorView: View {
             ))
             .textFieldStyle(.roundedBorder)
             .font(.title3)
+        }
+    }
+
+    private func bindingSection(workspace: Workspace) -> some View {
+        let matchedID = model.matchedArrangementID
+        let boundID = workspace.arrangementID
+        let isCurrentlyMatched = boundID != nil && boundID == matchedID
+        return VStack(alignment: .leading, spacing: 6) {
+            Text("Arrangement binding")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            Picker("", selection: Binding(
+                get: { boundID ?? Self.noneArrangementSentinel },
+                set: { newValue in
+                    let next: UUID? = (newValue == Self.noneArrangementSentinel) ? nil : newValue
+                    model.updateWorkspace(id: workspaceID) { $0.arrangementID = next }
+                }
+            )) {
+                Text("None").tag(Self.noneArrangementSentinel)
+                ForEach(model.arrangements) { arrangement in
+                    Text(arrangement.name).tag(arrangement.id)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+
+            if isCurrentlyMatched {
+                Label("Bound arrangement matches the connected displays.",
+                      systemImage: "checkmark.seal.fill")
+                    .font(.caption)
+                    .foregroundStyle(.green)
+            } else if boundID != nil {
+                Text("Auto-restored on launch and when this arrangement reconnects (requires Auto-restore on launch in the menu).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("Bind to an arrangement to auto-restore this workspace whenever that display setup matches.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 

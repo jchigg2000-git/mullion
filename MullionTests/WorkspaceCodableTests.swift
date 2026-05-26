@@ -80,6 +80,38 @@ final class WorkspaceCodableTests: XCTestCase {
         XCTAssertTrue(decoded.workspaces.isEmpty)
     }
 
+    func test_workspace_roundTrip_withArrangementBinding() throws {
+        let arrangementID = UUID()
+        let workspace = Workspace(
+            name: "Home desk",
+            items: [
+                WorkspaceItem(bundleID: "com.app.a",
+                              displayUUID: "D1",
+                              zoneID: UUID())
+            ],
+            arrangementID: arrangementID
+        )
+        let data = try JSONEncoder().encode(workspace)
+        let decoded = try JSONDecoder().decode(Workspace.self, from: data)
+        XCTAssertEqual(decoded.arrangementID, arrangementID)
+    }
+
+    func test_workspace_decodes_withoutArrangementID_legacyJSON() throws {
+        // workspaces.json files written before #28 shipped must still load.
+        let legacyJSON = """
+        {
+          "id": "11111111-1111-1111-1111-111111111111",
+          "name": "Old workspace",
+          "capturedAt": 700000000,
+          "items": []
+        }
+        """
+        let workspace = try JSONDecoder().decode(Workspace.self,
+                                                 from: Data(legacyJSON.utf8))
+        XCTAssertNil(workspace.arrangementID)
+        XCTAssertEqual(workspace.name, "Old workspace")
+    }
+
     func test_workspaceCatalog_multipleWorkspaces_roundTrip() throws {
         let catalog = WorkspaceCatalog(workspaces: [
             Workspace(name: "Home", items: [

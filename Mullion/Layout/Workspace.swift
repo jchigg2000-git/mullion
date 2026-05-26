@@ -48,23 +48,41 @@ struct WorkspaceItem: Codable, Identifiable, Hashable {
     }
 }
 
-/// A named snapshot of `[WorkspaceItem]` captured at `capturedAt`. Phase F #28
-/// will add optional arrangement binding (`arrangementID`) — left out of the
-/// type for #27 so the data file stays migration-friendly when #28 lands.
+/// A named snapshot of `[WorkspaceItem]` captured at `capturedAt`. When
+/// `arrangementID` is set, the workspace auto-restores whenever
+/// `ArrangementRegistry` reports that arrangement as the current match
+/// (gated by `AppSettings.autoRestoreEnabled`).
 struct Workspace: Codable, Identifiable, Hashable {
     let id: UUID
     var name: String
     var capturedAt: Date
     var items: [WorkspaceItem]
+    var arrangementID: UUID?
 
     init(id: UUID = UUID(),
          name: String,
          capturedAt: Date = Date(),
-         items: [WorkspaceItem] = []) {
+         items: [WorkspaceItem] = [],
+         arrangementID: UUID? = nil) {
         self.id = id
         self.name = name
         self.capturedAt = capturedAt
         self.items = items
+        self.arrangementID = arrangementID
+    }
+
+    // Tolerate workspaces written before `arrangementID` shipped.
+    private enum CodingKeys: String, CodingKey {
+        case id, name, capturedAt, items, arrangementID
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(UUID.self, forKey: .id)
+        self.name = try c.decode(String.self, forKey: .name)
+        self.capturedAt = try c.decode(Date.self, forKey: .capturedAt)
+        self.items = try c.decode([WorkspaceItem].self, forKey: .items)
+        self.arrangementID = try c.decodeIfPresent(UUID.self, forKey: .arrangementID)
     }
 }
 
