@@ -178,6 +178,11 @@ private final class GridOverlayPanel {
         p.becomesKeyOnlyIfNeeded = true
         view.frame = NSRect(origin: .zero, size: screen.frame.size)
         p.contentView = view
+        // The `screen:` init argument is a hint; force placement explicitly
+        // so multi-display setups don't end up with every panel invisibly
+        // stacked on the primary screen. See DragOverlayController's
+        // OverlayWindow for the matching fix.
+        p.setFrame(screen.frame, display: false)
         self.panel = p
     }
 

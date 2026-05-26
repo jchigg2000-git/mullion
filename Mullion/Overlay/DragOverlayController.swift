@@ -272,6 +272,13 @@ private final class OverlayWindow {
         win.isReleasedWhenClosed = false
         view.frame = NSRect(origin: .zero, size: screen.frame.size)
         win.contentView = view
+        // The `screen:` init argument is a hint, not authoritative. Without
+        // an explicit `setFrame(_:display:)`, overlays on non-primary
+        // displays end up invisibly stacked on the primary screen — the
+        // window's `.screen` reports correctly but macOS doesn't actually
+        // place the surface there. Forcing the absolute frame post-init is
+        // what makes the overlay show up on the target display.
+        win.setFrame(screen.frame, display: false)
         self.window = win
     }
 
