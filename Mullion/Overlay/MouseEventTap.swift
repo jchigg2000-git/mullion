@@ -3,13 +3,11 @@ import CoreGraphics
 import os
 
 /// Shared session-level `CGEventTap` for Phase E mouse-driven UX. Listens
-/// (`.listenOnly`) for left-mouse down/dragged/up events; downstream
-/// controllers will attach to `onMouseDown` / `onMouseDragged` / `onMouseUp`
-/// — `DragOverlayController` (step #25) handles drag-to-snap, and
-/// `GridOverlayController` (#26) handles hold-modifier reveal.
-///
-/// Step #24 (this file) is foundation: mount the tap, smoke-test that
-/// events arrive on the main thread without breaking input. No UI yet.
+/// (`.listenOnly`) for left-mouse down/dragged/up and flags-changed events;
+/// downstream controllers attach to `onMouseDown` / `onMouseDragged` /
+/// `onMouseUp` / `onFlagsChanged`. `DragOverlayController` (step #25)
+/// handles drag-to-snap, and `GridOverlayController` (#26) will handle
+/// hold-modifier reveal.
 ///
 /// Mouse events ride the existing AX permission — `cgSessionEventTap` +
 /// `.listenOnly` doesn't require an Input Monitoring entitlement on
@@ -22,16 +20,21 @@ final class MouseEventTap {
     private var port: CFMachPort?
     private var source: CFRunLoopSource?
 
-    /// Set by step #25's `DragOverlayController`. Coordinates are in
-    /// Quartz global space (top-left origin). Smoke build (#24) only logs.
-    var onMouseDown: ((CGPoint) -> Void)?
-    var onMouseDragged: ((CGPoint) -> Void)?
-    var onMouseUp: ((CGPoint) -> Void)?
+    /// Coordinates are in Quartz global space (top-left origin); flags
+    /// carry the current modifier state (⌥/⌃/⇧/⌘).
+    var onMouseDown: ((CGPoint, CGEventFlags) -> Void)?
+    var onMouseDragged: ((CGPoint, CGEventFlags) -> Void)?
+    var onMouseUp: ((CGPoint, CGEventFlags) -> Void)?
+
+    /// Fires on any modifier key change — used by overlay controllers to
+    /// cancel a drag if the user releases the activation modifier mid-drag.
+    var onFlagsChanged: ((CGEventFlags) -> Void)?
 
     private static let eventMask: CGEventMask =
         (1 << CGEventType.leftMouseDown.rawValue)
         | (1 << CGEventType.leftMouseDragged.rawValue)
         | (1 << CGEventType.leftMouseUp.rawValue)
+        | (1 << CGEventType.flagsChanged.rawValue)
 
     /// Mount the tap on the main runloop. Returns `false` if `tapCreate`
     /// fails — most commonly because AX trust hasn't been granted yet, or
@@ -60,7 +63,7 @@ final class MouseEventTap {
 
         self.port = port
         self.source = source
-        log.notice("mouse event tap mounted (mask=down|dragged|up)")
+        log.notice("mouse event tap mounted")
         return true
     }
 
@@ -83,25 +86,25 @@ final class MouseEventTap {
         guard let userInfo else { return Unmanaged.passUnretained(event) }
         let tap = Unmanaged<MouseEventTap>.fromOpaque(userInfo).takeUnretainedValue()
         let location = event.location
+        let flags = event.flags
         MainActor.assumeIsolated {
-            tap.handle(type: type, location: location)
+            tap.handle(type: type, location: location, flags: flags)
         }
         return Unmanaged.passUnretained(event)
     }
 
-    private func handle(type: CGEventType, location: CGPoint) {
+    private func handle(type: CGEventType, location: CGPoint, flags: CGEventFlags) {
         switch type {
         case .leftMouseDown:
-            // `log.notice` (default level) for step #24 smoke-test visibility.
-            // Steps #25/#26 should drop to `log.debug` to keep `Console.app`
-            // quiet during normal use.
-            log.notice("leftMouseDown @ (\(Int(location.x), privacy: .public), \(Int(location.y), privacy: .public))")
-            onMouseDown?(location)
+            log.debug("leftMouseDown @ (\(Int(location.x), privacy: .public), \(Int(location.y), privacy: .public))")
+            onMouseDown?(location, flags)
         case .leftMouseDragged:
-            onMouseDragged?(location)
+            onMouseDragged?(location, flags)
         case .leftMouseUp:
-            log.notice("leftMouseUp @ (\(Int(location.x), privacy: .public), \(Int(location.y), privacy: .public))")
-            onMouseUp?(location)
+            log.debug("leftMouseUp @ (\(Int(location.x), privacy: .public), \(Int(location.y), privacy: .public))")
+            onMouseUp?(location, flags)
+        case .flagsChanged:
+            onFlagsChanged?(flags)
         default:
             break
         }

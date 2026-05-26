@@ -15,6 +15,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let updaterController = UpdaterController()
     private let mouseEventTap = MouseEventTap()
     private lazy var arrangementRegistry = ArrangementRegistry(arrangementStore: arrangementStore)
+    private lazy var dragOverlayController = DragOverlayController(
+        layoutStore: layoutStore,
+        settingsStore: settingsStore,
+        appRuleStore: appRuleStore,
+        historyStore: historyStore
+    )
 
     private var statusItemController: StatusItemController?
     private var hotkeyManager: HotkeyManager?
@@ -106,6 +112,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // will mount it once the user grants access via onboarding.
         if AccessibilityGate.shared.isTrusted {
             mouseEventTap.mount()
+        }
+
+        // Phase E step #25: drag-to-snap overlay subscribes to mouse events.
+        // Lazy-init the controller and forward callbacks. Modifier-gating
+        // happens inside the controller (default ⌥).
+        let drag = dragOverlayController
+        mouseEventTap.onMouseDown = { [weak drag] point, flags in
+            drag?.handleMouseDown(at: point, flags: flags)
+        }
+        mouseEventTap.onMouseDragged = { [weak drag] point, flags in
+            drag?.handleMouseDragged(at: point, flags: flags)
+        }
+        mouseEventTap.onMouseUp = { [weak drag] point, flags in
+            drag?.handleMouseUp(at: point, flags: flags)
+        }
+        mouseEventTap.onFlagsChanged = { [weak drag] flags in
+            drag?.handleFlagsChanged(flags)
         }
 
         // FSEvents-driven auto-reload of every JSON config file. Manual

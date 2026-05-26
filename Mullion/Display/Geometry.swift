@@ -24,6 +24,20 @@ enum Geometry {
         return flipY(rect, originScreenMaxY: origin.frame.maxY)
     }
 
+    /// Point form of `axToAppKit` — convenience for cursor positions where
+    /// only an origin is meaningful. Same y-flip pivot as the rect variant.
+    static func axToAppKitPoint(_ point: CGPoint) -> CGPoint? {
+        guard let origin = originScreen else { return nil }
+        return CGPoint(x: point.x, y: origin.frame.maxY - point.y)
+    }
+
+    /// Reverse of `axToAppKitPoint`. Used when reading `NSEvent.mouseLocation`
+    /// (AppKit space) and we need to hit-test against AX (Quartz) coords.
+    static func appKitToAXPoint(_ point: CGPoint) -> CGPoint? {
+        guard let origin = originScreen else { return nil }
+        return CGPoint(x: point.x, y: origin.frame.maxY - point.y)
+    }
+
     /// Pure math entry point for testing — doesn't depend on NSScreen.
     /// The flip is symmetric, so it's the same transform either direction.
     static func flipY(_ rect: CGRect, originScreenMaxY: CGFloat) -> CGRect {
