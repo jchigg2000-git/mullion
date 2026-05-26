@@ -1,65 +1,46 @@
-# Handoff — 2026-05-26 10:35 local
+# Handoff — 2026-05-26 12:45 local
 
 ## What shipped (this session)
-- `7ef78e9` — feat: Phase E foundation + Swift 6 hygiene pass. Three swift-reviewer items cleared (`@MainActor` on every store + `JSONStore`; `WindowMutator.swift:53` `AXUIElement` Sendable capture replaced with `Task { @MainActor … }`; `DisplayRegistry.onChange` rewritten as a weak-host multicast and `LayoutEditorModel` now actually deinits via `LayoutEditorWindow.onClose`). Phase E step #24: new `Mullion/Overlay/MouseEventTap.swift` mounts a session-level `CGEventTap(.listenOnly)` for left-mouse-down/dragged/up + flags-changed, callback on main runloop via `MainActor.assumeIsolated`. (Note: this commit was bundled by another agent and also touched `docs/release.md` + `scripts/release.sh` — repo-path + Developer-ID identity fix, not Phase E.)
-- `5efbe76` — feat: Phase E #25 drag-to-snap overlay with wallpaper-tinted zones. New `Mullion/Overlay/DragOverlayController.swift` + per-display SwiftUI overlay; press ⌃ before *or* during the left-drag → all zones outline, hovered zone fills + glows. Release in a zone snaps via `.aggressive` `WindowMutator` profile (only profile that wins the macOS Sequoia native-tiling race). Wallpaper sampled per display via `CIAreaAverage`, hue-rotated 180° for a contrasting tint. 6 files touched, 587/-24 lines. Tests: 61, all pass.
-
-## In-flight
-**Phase E #26 (grid overlay) is uncommitted in the working tree.** Files:
-- `Mullion/Overlay/WallpaperTintProvider.swift` (new) — lifted out of `DragOverlayController.swift` to internal access so `GridOverlayController` can reuse it.
-- `Mullion/Overlay/GridOverlayController.swift` (new) — hold-modifier grid reveal; per-display non-activating `NSPanel` paints zones + big 1-9/0 badges in their centres; click a zone snaps the captured-at-reveal focused window via the same `.aggressive` profile.
-- `Mullion/Overlay/DragOverlayController.swift` (modified) — removed the in-file `WallpaperTintProvider` (now imported from the lifted file).
-- `Mullion/Settings/AppSettings.swift` (modified) — `ModifierMask` refactored to **exact-bitmask** matching across `{shift, control, option, command}` (so holding ⌃⌥ no longer satisfies `.control`); added `.controlOption / .controlShift / .optionShift` cases; new `gridModifier: ModifierMask` field (default `.controlOption`).
-- `Mullion/Core/AppDelegate.swift` (modified) — lazy `GridOverlayController`; `onFlagsChanged` now fans out to both controllers.
-
-Smoke-tested in the running app (PID `27851`): grid reveals on all three displays with badges visible, click-snap lands, focus stays on the source app (non-activating panel), keyboard `⌥⌃<n>` still snaps via the existing hotkey path. Drag-snap unchanged.
-
-A debug build at `~/Library/Developer/Xcode/DerivedData/Mullion-bpvwblqjcwcevmhhbmmwsxlwmnts/Build/Products/Debug/Mullion.app` is running — kill via `pkill -x Mullion` before relaunching from a future build.
+- `365540d` — fix: overlay placement on non-primary displays. `NSWindow(contentRect:..., screen:)` treats the `screen:` parameter as a hint, not authoritative — on multi-display setups Phase E drag and grid overlays were being created with the correct `.screen` reported but the surface was invisibly stacked on the primary display. Forcing `setFrame(screen.frame, display: false)` immediately after init makes macOS actually place the surface on the target display. Two-line fix in `DragOverlayController.OverlayWindow.init` and `GridOverlayController.GridOverlayPanel.init`. Verified via diagnostic logging: all three displays now report `vis=true` with correct cross-display absolute frames.
+- `53841de` — feat: Phase F #27 Workspaces: capture + restore. New `Mullion/Layout/Workspace.swift` (Codable `WorkspaceItem` + `Workspace` + `WorkspaceCatalog`, versioned), `WorkspaceStore.swift` (`JSONStore<WorkspaceCatalog>` at `Application Support/Mullion/workspaces.json`), `WorkspaceController.swift` (capture walks running apps and records each window whose centre falls inside a zone on its display; restore matches by closest captured frame, falls back to title then first-remaining). New `Mullion/UI/WorkspacesEditorView.swift` sidebar section: edit-immediate name, Restore + Recapture buttons, per-item grid (App / Window / Display / Zone), restore-result feedback. Wired into `AppDelegate` (`workspaceStore` + lazy `workspaceController`) and `LayoutEditorModel` (sidebar selection, capture/restore/update/delete). 6 codable roundtrip + legacy-decode tests. 8 files, +675/-2 lines.
+- `7736371` — feat: Phase F #28 Workspaces: arrangement binding. `Workspace.arrangementID: UUID?` field, `decodeIfPresent` for legacy files. When `ArrangementRegistry.onMatched` fires (launch or display change), `AppDelegate.autoRestoreBoundWorkspaces(for:)` looks up workspaces bound to the match and restores the most-recently-captured one via `WorkspaceController`, gated by `autoRestoreEnabled` + AX trust. New "Arrangement binding" section in the workspace detail with a `None`-sentinel picker; inline label flips to green when the bound arrangement is the current match. 2 binding-roundtrip + legacy-decode tests. 4 files, +126/-4. Tests: 69, all pass.
 
 ## Decisions (this session)
-- **`dragSnapModifier` default switched from `.option` to `.control`.** `.option`-drag is macOS Sequoia's native window-tiling activator and was racing our snap; `.control` doesn't collide with any OS gesture.
-- **`gridModifier` is the `.controlOption` chord, not a single key.** A chord is the only way to cleanly distinguish from drag-snap's `.control` without depending on whether the mouse button is held.
-- **`ModifierMask.isSatisfied` now does exact-bitmask matching** across the four interesting modifiers (shift/control/option/command). Required for the chord-vs-single-key disambiguation above — `.control` won't accidentally match while ⌥ is also pressed.
-- **Drag-snap and grid-snap both force `CompatProfile.aggressive`** regardless of per-app rule. The verify-and-retry path is what wins the race against macOS Sequoia's native tiling fighting back ~40-100ms after our write. Apps that explicitly need `.systemWindowManager` still fall through to `.standard` in `WindowMutator`.
-- **Overlay windows live at `.popUpMenu` level (101).** `.floating` (3) sat *below* the OS drag preview — the user reported the overlay was invisible until we raised the level. `show()` was also made to always `orderFront` so transient OS overlays (notification banners, Spotlight) can't bury us.
-- **Grid panels use `.nonactivatingPanel` style** so clicking a zone doesn't steal focus from the user's actual window. Focused window is snapshotted at the moment of modifier-press, used for snap on click.
-- **Drag overlay layout bug worth remembering:** the SwiftUI `.frame(w,h).offset(x,y)` combination collapses the ZStack's intrinsic size to ~zero and most zones fell outside the hosting view's render rect (user saw "half of one zone"). The fix is `GeometryReader` + `.position(x:y:)` for direct absolute placement. Same pattern reused in `GridContentView`.
-- No new auto-memory entries this session — every decision above is captured in the code's own comments.
+- **Workspace restore matches by closest captured frame, not by window title or AXWindowID.** iTerm titles every window the same string ("Default") so title-matching collapsed on the very first smoke test. AXWindowID is private API and we don't depend on it elsewhere. The captured frame is the most reliable per-window identifier we can persist without going off-API. Falls back to title-match (when capturedFrame absent — legacy files) and then to first-remaining.
+- **Multiple workspaces bound to one arrangement: most-recently-captured wins.** Legal but ambiguous state; `capturedAt` is the most defensible tiebreaker. Recapture acts as "this is now the one."
+- **Auto-restore fires both at launch and on every arrangement-match transition.** Launch path is the explicit call inside the existing `autoRestoreEnabled && AX-trusted` block in `applicationDidFinishLaunching` (the `recompute()` earlier fires before the callback is wired, so the callback alone wouldn't catch launch). Display-change path is the `onMatched` callback. Both gated by the same two conditions.
+- **`WorkspaceController` lives outside the editor model.** Phase F #28 calls it directly from `AppDelegate`; the editor model proxies through it. Keeps the capture/restore engine independent of the UI surface.
+- **Overlay diagnostic logging was added then removed.** The `debugSnapshot` accessor + per-show log line confirmed the multi-display fix; once verified, both were stripped to keep the regular drag/grid log tidy. The `setFrame` fix + a one-paragraph comment explaining why is what stayed.
 
 ## Don't break
-- **`ModifierMask` is exact-bitmask now**, not bitwise-contains. Adding a new gesture means picking a non-overlapping mask, or accepting that two gestures fire on the same modifier state (and disambiguating in the controller).
-- **`WallpaperTintProvider` lives at internal scope** in `Mullion/Overlay/WallpaperTintProvider.swift`. Each overlay controller owns its own instance — the underlying cache is per-instance, so two instances each pay one wallpaper-sample cost per display. Cheap enough to not bother sharing.
-- **`MouseEventTap` exposes one callback slot per event type.** Fan-out happens in `AppDelegate`. If a third overlay controller appears, update the closures in `AppDelegate.applicationDidFinishLaunching` rather than introducing a multicast inside `MouseEventTap`.
-- **`GridOverlayPanel` accepts clicks** (`ignoresMouseEvents = false`); `DragOverlayWindow` is click-through (`ignoresMouseEvents = true`). Do not unify the two without revisiting the click-routing path.
-- **After adding files in `Mullion/`, run `xcodegen generate` before `xcodebuild`.** Same as last session — `Mullion.xcodeproj/project.pbxproj` is gitignored, locally generated from `project.yml`.
+- **`Workspace.arrangementID` is optional Codable with `decodeIfPresent`.** Older workspaces.json files (no `arrangementID`, or `WorkspaceItem` without `capturedAXFrame`) must keep loading. Schema bumps go through the same pattern.
+- **Workspace `recapture` does a throwaway-then-delete dance.** `LayoutEditorModel.recaptureWorkspace` calls `workspaceController.captureCurrent` (which persists a new workspace), then immediately removes that disposable workspace and upserts the original id with the new items. Not transactional — if the app crashes between the throwaway capture and the remove, you'd end up with two workspaces. JSONStore's 500ms debounce shrinks the disk window further, but it's not guaranteed. Worth refactoring `WorkspaceController.captureCurrent` to take an "in-place-on" parameter if this matters.
+- **Auto-restore order at launch: AppRule/Learned (existing `AutoRestore`) runs first, then bound-workspace restore.** Workspace is more specific — it overrides AppRule placements where the two collide. If a workspace doesn't capture a given window, AppRule's placement for that window stands.
+- **Multi-display overlay placement requires `setFrame(screen.frame, display: false)` AFTER init.** The `screen:` init argument is documented as a hint and macOS silently ignores it on non-primary displays. Adding a new overlay-controller-style surface? Copy the pattern from `DragOverlayController.OverlayWindow.init` / `GridOverlayController.GridOverlayPanel.init`.
+- **After adding files in `Mullion/`, run `xcodegen generate` before `xcodebuild`.** `Mullion.xcodeproj/project.pbxproj` is gitignored.
 
 ## Next session: start here
 
-**Phase E is complete.** Build order (`docs/design/v1.md`) puts **Phase F — workspaces** next:
+**Phase F is complete.** From `docs/design/v1.md`, the remaining build-order item is:
 
-- **Step #27 — Workspaces: capture + restore.** UI in the editor window. A workspace = snapshot of (windowID, bundleID, zoneID) tuples at capture time. Restore reapplies the placements. No arrangement binding yet.
-- **Step #28 — Workspaces: arrangement binding.** Auto-restore a workspace when its bound arrangement matches the current display signature. Builds on `ArrangementRegistry.onMatched` (the callback `AppDelegate` currently only logs — Phase D wired the data flow but left the application open).
+- **Step #29 — `SystemWindowManager` fallback (Phase G, conditional).** Gated entirely behind `compatibilityProfile == .systemWindowManager`. Half/third support only. **Build only if a real user reports an app where the AX path can't be made to work.** No known requestor yet, so this is hold-for-demand, not next-session work.
 
-Concrete first steps for #27:
-1. Read `docs/design/v1.md` "Workspaces" section + step #27 line.
-2. Define `Workspace` + `WorkspaceCatalog` Codable types alongside `Arrangement` / `AppRule` / etc. Add a `WorkspaceStore` wrapping `JSONStore<WorkspaceCatalog>`.
-3. Editor sidebar gets a new section (follow the `[[mullion-editor-ui-conventions]]` memory — HSplitView, unified `+/-/↑↓` toolbar, edit-immediate).
-4. "Capture current" gesture walks `AXUIElementCreateApplication` for each running app, records each window's enclosing zone (or `nil` if none).
-5. "Restore" walks the catalog and applies via the same `ChainedWindowMover` AutoRestore uses.
-
-Worth considering before #27:
-- **Add tests for Phase E.** No new unit tests landed in #24/#25/#26 (the overlays are mostly geometry + AppKit glue, hard to unit-test without an AppKit run-loop). `FrameResolver` math is already covered; consider extracting overlay zone-position math (`OverlayWindow.render`-equivalent) so it can be tested headless. Or accept that overlays are exercised only via the running app.
-- **Close the Phase D loop.** `ArrangementRegistry.onMatched` still only logs; `AppDelegate.applicationDidFinishLaunching` line 33-39 has the callback. Surfacing "Arrangement: <name>" in the menu-bar dropdown is a 20-minute follow-up (`Mullion/UI/LayoutPickerMenu.swift:38-104` — actually was done in `29558f9`, the "auto-snap on match" piece is what's still open).
+So the actual next thing is either:
+1. **v1.0 release pipeline.** Per `[[mullion-release-pipeline]]`: wired + smoke-tested, holding for v1.0 tag. Requires DEVELOPER_ID_APP + NOTARY_KEYCHAIN_PROFILE + SUFeedURL/SUPublicEDKey before Sparkle goes live. See `docs/release.md` + `scripts/release.sh`.
+2. **Polish pass before public release.** Settings UI for `dragSnapModifier` / `gridModifier` (currently hand-edit `settings.json`); wallpaper-tint refresh on `NSWorkspaceActiveSpaceDidChangeNotification`; status-menu "Arrangement: \<name\>" already lands via `29558f9` but auto-snap-on-match (apply `defaultLayoutID` behaviourally beyond the workspace path) is still log-only.
+3. **Light-touch test coverage.** Phase E overlay controllers + `WorkspaceController` capture/restore are exercised only through the running app. Pure-math extraction would let them run under XCTest without an AppKit run loop.
 
 ## Deferred / open
-- **No Phase E tests.** Overlay controllers + tint provider are exercised only through the running app. See "worth considering" above.
-- **`ModifierMask` chord coverage is partial.** `controlOption`, `controlShift`, `optionShift` exist; `commandOption`, three-key chords, etc. don't. Add as needed.
-- **Wallpaper tint doesn't refresh on wallpaper change.** Sampled once per display on first overlay show, cached for the app's lifetime. Relaunch picks up new wallpapers. If a user complains, hook `NSWorkspaceActiveSpaceDidChangeNotification` or watch `desktopImageURL(for:)` for changes.
-- **Settings UI for modifiers doesn't exist.** `dragSnapModifier` and `gridModifier` are persisted in `settings.json` and decode-with-default; no editor surface for changing them. Users have to hand-edit JSON until an editor lands.
-- Phase D follow-up: behavioural application of `defaultLayoutID` (status-menu indicator beyond the name display, auto-snap on match, AutoRestore integration) is still unscoped. Today it's a log line only.
-- `Mullion/Hotkeys/HotkeyBinding.swift:16` `case focus` marked "v1: stub" — intentional, deferred per design.
-- `Mullion/UI/AppRulesEditorView.swift:234` Phase G escape hatch — intentional, deferred per design.
-- `Mullion/Update/UpdaterController.swift:35` Sparkle disabled until `SUFeedURL`/`SUPublicEDKey` are configured. Holding for v1.0 first public release per [[mullion-release-pipeline]].
+- **No tests for Phase E overlays.** Same as last handoff — `DragOverlayController`, `GridOverlayController`, `WallpaperTintProvider` only via the running app.
+- **No tests for `WorkspaceController.captureCurrent` / `restore`.** Same reason — needs running apps + AX. The Codable surface is covered.
+- **`WorkspaceController.recapture` is non-atomic.** See "Don't break" above.
+- **Phase D follow-up: behavioural application of `defaultLayoutID`.** Today `arrangementRegistry.onMatched` fires for any default layout, but `AppDelegate` only logs it (auto-snap on match, AutoRestore-style apply, etc. still TBD). Phase F #28 wires a parallel workspace path; the layout path is still log-only.
+- **Settings UI for `dragSnapModifier` / `gridModifier`.** Hand-edit `settings.json` until an editor lands.
+- **Wallpaper tint doesn't refresh on wallpaper change.** Sampled once per display on first overlay show, cached for the app's lifetime.
+- **`ModifierMask` chord coverage is partial** (`controlOption`, `controlShift`, `optionShift` only). Add as needed.
+- **Sparkle feed disabled.** `Mullion/Update/UpdaterController.swift:35` — holding for v1.0 first public release per [[mullion-release-pipeline]].
+- **`Mullion/Hotkeys/HotkeyBinding.swift:16` `case focus`** marked "v1: stub" — intentional, deferred per design.
+- **`Mullion/UI/AppRulesEditorView.swift:234` Phase G escape hatch** — intentional, deferred per design.
 
 ## How to verify
 ```
@@ -69,4 +50,4 @@ xcodegen generate
 xcodebuild -project Mullion.xcodeproj -scheme Mullion -destination 'platform=macOS' test 2>&1 | grep "Executed.*tests" | tail -1
 ```
 
-Expected: HEAD at `5efbe76` on `main` (no Phase E #26 commit yet — uncommitted in the working tree per **In-flight** above); clean tree apart from 3 modified + 2 new untracked files under `Mullion/Overlay/` + `Mullion/Settings/` + `Mullion/Core/`; `Executed 61 tests, with 0 failures`.
+Expected: HEAD at `7736371` on `main`; clean tree; `Executed 69 tests, with 0 failures`.
