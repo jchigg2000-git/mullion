@@ -1,23 +1,43 @@
 import AppKit
 import Observation
 
+/// What's currently selected in the editor sidebar. Drives the detail view.
+enum EditorSelection: Hashable {
+    case layout(UUID)
+    case appRule(UUID)
+    case binding(UUID)
+}
+
 /// SwiftUI-facing state for the layout editor. Wraps the app's shared
 /// `LayoutStore` so edits propagate to live hotkey dispatch without a
 /// manual "Reload Layouts" step, but holds a `workingCopy` so in-flight
 /// edits don't spam disk writes (the store debounces writes, but we also
 /// want a clear Save/Revert gesture).
+///
+/// App rules and bindings are edit-immediate — there's no working-copy
+/// dance because they're small, focused records and the latency-to-rule-
+/// activation matters more than a save/revert affordance.
 @Observable
+@MainActor
 final class LayoutEditorModel {
     private let layoutStore: LayoutStore
-    private let bindingStore: BindingStore?
-    private let bindingsProvider: () -> [HotkeyBinding]
+    private let bindingStore: BindingStore
+    private let appRuleStore: AppRuleStore
     private let onBindingsChanged: (() -> Void)?
 
     /// All layouts as currently persisted (refreshed on save / revert / external reload).
     private(set) var layouts: [Layout]
 
-    /// ID of the layout being edited. `nil` when no layout is selected.
-    var selection: Layout.ID?
+    /// All app rules as currently persisted. Edit-immediate — write through.
+    private(set) var appRules: [AppRule]
+
+    /// All bindings as currently persisted. The Bindings sidebar section
+    /// filters this to multi-target / `.focus` bindings (single-zone snaps
+    /// stay on the per-zone Recorder inside the Layouts inspector).
+    private(set) var bindings: [HotkeyBinding]
+
+    /// What's currently selected in the editor sidebar. Drives the detail view.
+    var selection: EditorSelection?
 
     /// Mutable copy of the selected layout. Changes here drive the inspector
     /// and preview without touching the store until `save()`.
@@ -39,17 +59,19 @@ final class LayoutEditorModel {
     private let previousOnChange: (() -> Void)?
 
     init(layoutStore: LayoutStore,
-         bindingStore: BindingStore? = nil,
-         bindingsProvider: @escaping () -> [HotkeyBinding] = { [] },
+         bindingStore: BindingStore,
+         appRuleStore: AppRuleStore,
          onBindingsChanged: (() -> Void)? = nil) {
         self.layoutStore = layoutStore
         self.bindingStore = bindingStore
-        self.bindingsProvider = bindingsProvider
+        self.appRuleStore = appRuleStore
         self.onBindingsChanged = onBindingsChanged
         self.layouts = layoutStore.layouts
+        self.appRules = appRuleStore.rules
+        self.bindings = bindingStore.bindings
         self.screens = DisplayRegistry.shared.screens
-        self.selection = layoutStore.layouts.first?.id
         if let first = layoutStore.layouts.first {
+            self.selection = .layout(first.id)
             self.workingCopy = first
             self.selectedZoneID = first.zones.first?.id
         }
@@ -68,18 +90,43 @@ final class LayoutEditorModel {
 
     // MARK: Selection
 
-    func select(layoutID: Layout.ID?) {
-        selection = layoutID
-        if let id = layoutID, let layout = layoutStore.layouts.first(where: { $0.id == id }) {
-            workingCopy = layout
-            selectedZoneID = layout.zones.first?.id
-        } else {
-            workingCopy = nil
-            selectedZoneID = nil
+    /// Convenience: ID of the layout currently selected (if any).
+    var selectedLayoutID: Layout.ID? {
+        if case .layout(let id) = selection { return id }
+        return nil
+    }
+
+    /// Called from a `.onChange(of: selection)` hook whenever the sidebar
+    /// selection changes. Drives the layout working-copy side effect that
+    /// used to live inside the now-removed `select(_:)` method. Selection
+    /// itself is written via the direct `$model.selection` binding, which
+    /// the List needs for its internal state to stay coherent with the
+    /// model — wrapping it in a `Binding(get:, set:)` causes List to lose
+    /// selection-acceptance after a sidebar mutation under @Observable.
+    func onSelectionChanged() {
+        switch selection {
+        case .layout(let id):
+            if let layout = layoutStore.layouts.first(where: { $0.id == id }) {
+                // Only refresh working copy if the user navigated to a
+                // *different* layout; otherwise we'd blow away unsaved edits
+                // whenever the inspector causes a re-render.
+                if workingCopy?.id != layout.id {
+                    workingCopy = layout
+                    selectedZoneID = layout.zones.first?.id
+                }
+            } else {
+                workingCopy = nil
+                selectedZoneID = nil
+            }
+        case .appRule, .binding, .none:
+            // Switching to a non-layout section preserves any unsaved edits
+            // to whichever layout was most recently opened, so the user can
+            // bounce back and forth without losing them.
+            break
         }
     }
 
-    // MARK: Dirty state
+    // MARK: Dirty state (layouts only — rules/bindings are edit-immediate)
 
     var isDirty: Bool {
         guard let workingCopy, let stored = layoutStore.layouts.first(where: { $0.id == workingCopy.id }) else {
@@ -89,7 +136,7 @@ final class LayoutEditorModel {
         return stored != workingCopy
     }
 
-    // MARK: Mutations
+    // MARK: Mutations — layouts
 
     func save() {
         guard let workingCopy else { return }
@@ -98,7 +145,7 @@ final class LayoutEditorModel {
     }
 
     func revert() {
-        guard let id = selection,
+        guard let id = selectedLayoutID,
               let stored = layoutStore.layouts.first(where: { $0.id == id }) else {
             workingCopy = nil
             selectedZoneID = nil
@@ -120,7 +167,7 @@ final class LayoutEditorModel {
         )
         layoutStore.upsert(layout)
         layouts = layoutStore.layouts
-        selection = layout.id
+        selection = .layout(layout.id)
         workingCopy = layout
         selectedZoneID = layout.zones.first?.id
     }
@@ -138,7 +185,7 @@ final class LayoutEditorModel {
     /// ↑↓ buttons in the sidebar. No-op when no selection or already at the
     /// boundary in that direction.
     func moveSelectedLayout(direction: ReorderDirection) {
-        guard let id = selection,
+        guard let id = selectedLayoutID,
               let idx = layouts.firstIndex(where: { $0.id == id }) else { return }
         let target = idx + direction.delta
         guard layouts.indices.contains(target) else { return }
@@ -149,7 +196,7 @@ final class LayoutEditorModel {
     }
 
     var canMoveSelectedLayout: (up: Bool, down: Bool) {
-        guard let id = selection,
+        guard let id = selectedLayoutID,
               let idx = layouts.firstIndex(where: { $0.id == id }) else {
             return (false, false)
         }
@@ -184,12 +231,18 @@ final class LayoutEditorModel {
     }
 
     func deleteSelectedLayout() {
-        guard let id = selection else { return }
+        guard let id = selectedLayoutID else { return }
         layoutStore.remove(layoutWithID: id)
         layouts = layoutStore.layouts
-        selection = layouts.first?.id
-        workingCopy = layouts.first
-        selectedZoneID = workingCopy?.zones.first?.id
+        if let first = layouts.first {
+            selection = .layout(first.id)
+            workingCopy = first
+            selectedZoneID = first.zones.first?.id
+        } else {
+            selection = nil
+            workingCopy = nil
+            selectedZoneID = nil
+        }
     }
 
     // MARK: Zone mutations (operate on workingCopy)
@@ -224,7 +277,7 @@ final class LayoutEditorModel {
     /// Returns the bindings that target the given zone — used to warn before
     /// destructive edits. Empty when no bindings reference the zone.
     func bindingsReferencing(zoneID: Zone.ID) -> [HotkeyBinding] {
-        bindingsProvider().filter { $0.targets.contains(zoneID) }
+        bindings.filter { $0.targets.contains(zoneID) }
     }
 
     /// Stable per-zone shortcut name for the user-managed Recorder slot.
@@ -238,13 +291,13 @@ final class LayoutEditorModel {
     /// binding to match the current shortcut state, then asks the host to
     /// re-register hotkeys.
     func applyShortcut(forZoneID zoneID: Zone.ID, hasShortcut: Bool) {
-        guard let bindingStore else { return }
         let name = shortcutName(forZoneID: zoneID)
         if hasShortcut {
             bindingStore.setSnapBinding(forZoneID: zoneID, shortcutName: name)
         } else {
             bindingStore.removeSnapBinding(forZoneID: zoneID, shortcutName: name)
         }
+        bindings = bindingStore.bindings
         onBindingsChanged?()
     }
 
@@ -261,6 +314,148 @@ final class LayoutEditorModel {
               let idx = copy.zones.firstIndex(where: { $0.id == id }) else { return }
         transform(&copy.zones[idx])
         workingCopy = copy
+    }
+
+    /// The zone's natural pixel dimensions on the currently-previewed
+    /// display, ignoring any in-flight `sizeOverride`. Powers the "Detect"
+    /// button in the pixel-pinned-size editor: clicking it captures the
+    /// zone's render size against the selected display so the user
+    /// doesn't have to compute it by hand.
+    func detectedPixelSize(forZoneID id: Zone.ID) -> CGSize? {
+        guard let copy = workingCopy,
+              let zone = copy.zones.first(where: { $0.id == id }),
+              let screen = resolvedPreviewScreen() else { return nil }
+        var probe = zone
+        probe.sizeOverride = nil
+        let rect = FrameResolver.appKitFrame(for: probe, in: copy, on: screen)
+        return rect.size
+    }
+
+    // MARK: Mutations — app rules (edit-immediate)
+
+    /// Flat (layout, zone) pairs across every layout. Used by the rule
+    /// inspector's zone picker so a rule can target any zone in any layout.
+    var allZonesForPicker: [(layoutName: String, zone: Zone)] {
+        layouts.flatMap { layout in
+            layout.zones.map { (layoutName: layout.name, zone: $0) }
+        }
+    }
+
+    func zoneName(forID id: UUID) -> String? {
+        layoutStore.zone(withID: id)?.name
+    }
+
+    func layoutName(containingZoneID id: UUID) -> String? {
+        layouts.first { $0.zones.contains(where: { $0.id == id }) }?.name
+    }
+
+    func addAppRule() {
+        // Seed with first running app + first available zone — gives the
+        // form something selectable rather than dropping the user into an
+        // empty-everything state.
+        let seedBundleID = NSWorkspace.shared.runningApplications
+            .first { $0.activationPolicy == .regular }?.bundleIdentifier ?? ""
+        let seedZoneID = layoutStore.layouts.first?.zones.first?.id ?? UUID()
+        let rule = AppRule(
+            bundleID: seedBundleID,
+            displayPredicate: .anyDisplay,
+            preferredZoneID: seedZoneID,
+            compatibilityProfile: .standard
+        )
+        appRuleStore.upsert(rule)
+        appRules = appRuleStore.rules
+        selection = .appRule(rule.id)
+    }
+
+    func updateAppRule(id: UUID, _ transform: (inout AppRule) -> Void) {
+        guard var rule = appRuleStore.rules.first(where: { $0.id == id }) else { return }
+        transform(&rule)
+        appRuleStore.upsert(rule)
+        appRules = appRuleStore.rules
+    }
+
+    func deleteAppRule(id: UUID) {
+        appRuleStore.remove(ruleWithID: id)
+        appRules = appRuleStore.rules
+        if case .appRule(let selectedID) = selection, selectedID == id {
+            selection = appRules.first.map { .appRule($0.id) }
+        }
+    }
+
+    // MARK: Mutations — bindings (edit-immediate)
+
+    /// Subset shown in the Bindings sidebar section. The per-zone Recorder
+    /// in the Layouts inspector already handles single-target snap bindings;
+    /// duplicating that surface here would confuse rather than help.
+    var nonTrivialBindings: [HotkeyBinding] {
+        bindings.filter { $0.role == .focus || $0.targets.count > 1 }
+    }
+
+    func addBinding() {
+        let firstZoneID = layoutStore.layouts.first?.zones.first?.id ?? UUID()
+        // Empty shortcutName means the Recorder shows "Record Shortcut"
+        // until the user picks one. ActionDispatcher tolerates this — no
+        // KeyboardShortcuts.Name registers without a chord, so it's inert.
+        let binding = HotkeyBinding(
+            shortcutName: "mullion.binding.\(UUID().uuidString)",
+            targets: [firstZoneID],
+            role: .snap
+        )
+        bindingStore.upsert(binding)
+        bindings = bindingStore.bindings
+        selection = .binding(binding.id)
+        onBindingsChanged?()
+    }
+
+    func updateBinding(id: UUID, _ transform: (inout HotkeyBinding) -> Void) {
+        guard var binding = bindingStore.bindings.first(where: { $0.id == id }) else { return }
+        transform(&binding)
+        bindingStore.upsert(binding)
+        bindings = bindingStore.bindings
+        onBindingsChanged?()
+    }
+
+    func deleteBinding(id: UUID) {
+        bindingStore.remove(bindingWithID: id)
+        bindings = bindingStore.bindings
+        if case .binding(let selectedID) = selection, selectedID == id {
+            selection = nonTrivialBindings.first.map { .binding($0.id) }
+        }
+        onBindingsChanged?()
+    }
+
+    /// Re-register hotkeys without mutating any store. Used by the bindings
+    /// editor's KeyboardShortcuts.Recorder onChange — the library writes
+    /// the chord to UserDefaults itself, but `HotkeyManager` still needs
+    /// to re-register handlers for the new shortcut to take effect.
+    func notifyBindingsChanged() {
+        onBindingsChanged?()
+    }
+
+    /// Picks up external edits (FSEvents reload, manual "Reload") so the
+    /// editor reflects the new on-disk state.
+    ///
+    /// When the currently-selected item has been deleted externally we also
+    /// clear the working copy — otherwise `save()` would silently undo the
+    /// external delete by re-upserting the in-memory copy on the next Save.
+    func refreshFromStores() {
+        layouts = layoutStore.layouts
+        appRules = appRuleStore.rules
+        bindings = bindingStore.bindings
+        switch selection {
+        case .layout(let id):
+            if !layouts.contains(where: { $0.id == id }) {
+                selection = nil
+                workingCopy = nil
+                selectedZoneID = nil
+            }
+        case .appRule(let id):
+            if !appRules.contains(where: { $0.id == id }) { selection = nil }
+        case .binding(let id):
+            if !bindings.contains(where: { $0.id == id }) { selection = nil }
+        case .none:
+            break
+        }
     }
 
     // MARK: Fill empty space

@@ -14,7 +14,7 @@ final class ActionDispatcher {
     private let log = Logger(subsystem: "com.mullion.Mullion", category: "dispatcher")
     private let layoutStore: LayoutStore
     private let bindingsProvider: () -> [HotkeyBinding]
-    private let mover: WindowMover
+    private let mover: any WindowMover
     private let history: WindowHistoryStore?
     private let focusIndex: FocusIndex
 
@@ -30,16 +30,20 @@ final class ActionDispatcher {
     private var snapCycleState: [CycleKey: Int] = [:]
     private var focusCycleState: [UUID: Int] = [:]
 
+    private let appRuleStore: AppRuleStore?
+
     init(layoutStore: LayoutStore,
          bindingsProvider: @escaping () -> [HotkeyBinding],
-         mover: WindowMover = ChainedWindowMover.default,
+         mover: any WindowMover = ChainedWindowMover.default,
          history: WindowHistoryStore? = nil,
-         focusIndex: FocusIndex = FocusIndex()) {
+         focusIndex: FocusIndex = FocusIndex(),
+         appRuleStore: AppRuleStore? = nil) {
         self.layoutStore = layoutStore
         self.bindingsProvider = bindingsProvider
         self.mover = mover
         self.history = history
         self.focusIndex = focusIndex
+        self.appRuleStore = appRuleStore
     }
 
     func handle(bindingID: UUID) {
@@ -161,9 +165,15 @@ final class ActionDispatcher {
             return
         }
 
-        let landed = mover.move(window, to: targetAX)
+        let profile: CompatProfile
+        if let bundleID = window.bundleIdentifier {
+            profile = appRuleStore?.profile(forBundleID: bundleID, on: screen) ?? .standard
+        } else {
+            profile = .standard
+        }
+        let landed = mover.move(window, to: targetAX, profile: profile)
         if !landed {
-            log.debug("snap did not land near target for pid=\(window.pid, privacy: .public) zone=\(zone.name, privacy: .public)")
+            log.debug("snap did not land near target for pid=\(window.pid, privacy: .public) zone=\(zone.name, privacy: .public) profile=\(profile.rawValue, privacy: .public)")
         }
         if let bundleID = window.bundleIdentifier {
             history?.record(

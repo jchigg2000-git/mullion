@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 final class AppRuleStore {
@@ -25,5 +26,20 @@ final class AppRuleStore {
         store.update { catalog in
             catalog.rules.removeAll { $0.id == id }
         }
+    }
+
+    /// Returns the compatibility profile to use for `bundleID` when its
+    /// window currently lives on `screen`. Walks rules in order, picking
+    /// the first whose bundleID matches and whose displayPredicate matches
+    /// `screen`. Defaults to `.standard` when no rule applies.
+    func profile(forBundleID bundleID: String, on screen: NSScreen) -> CompatProfile {
+        let uuid = DisplayRegistry.uuid(for: screen)
+        let aspect = Double(screen.frame.width / screen.frame.height)
+        for rule in rules where rule.bundleID == bundleID {
+            if rule.displayPredicate.matches(uuid: uuid, aspectRatio: aspect) {
+                return rule.compatibilityProfile
+            }
+        }
+        return .standard
     }
 }

@@ -8,22 +8,71 @@ struct LayoutEditorView: View {
     @State private var showingDeleteZoneWarning: Bool = false
     @State private var bindingsBlockingDelete: [HotkeyBinding] = []
 
+    /// Selection the user requested while a dirty layout was loaded.
+    /// When set, the dirty-switch confirmation dialog is presented; the
+    /// underlying `model.selection` is reverted to keep the dirty layout
+    /// open until the user picks Save / Discard / Stay.
+    @State private var pendingSwitchTarget: EditorSelection?
+
     var body: some View {
-        NavigationSplitView {
+        // HSplitView (not NavigationSplitView) because the editor's sidebar
+        // is the primary tool, not a collapsible navigation list — the
+        // NavigationSplitView toolbar item to toggle the sidebar was
+        // pushing the window title into truncation, and its rounded
+        // sidebar chrome made the layout / rule / binding sections look
+        // like a floating card rather than a panel of the window.
+        HSplitView {
             sidebar
-                .navigationSplitViewColumnWidth(min: 220, ideal: 260)
-        } detail: {
-            if model.workingCopy != nil {
-                detail
-            } else {
-                ContentUnavailableView(
-                    "No layout selected",
-                    systemImage: "rectangle.3.group",
-                    description: Text("Pick a layout in the sidebar or create a new one.")
-                )
-            }
+                .frame(minWidth: 240, idealWidth: 280, maxWidth: 360)
+            detail
+                .frame(minWidth: 720)
         }
         .frame(minWidth: 1040, minHeight: 640)
+        .onChange(of: model.selection) { _, newValue in
+            // Re-entrant call from a manual revert below — skip so we don't
+            // re-prompt for the selection state we just restored.
+            if pendingSwitchTarget != nil { return }
+
+            // The data-loss surface: a dirty layout's working copy gets
+            // blown away when `onSelectionChanged` loads a different
+            // layout. Catch the transition whether it's a direct
+            // layout→layout click or a layout→rule→layout detour.
+            if case .layout(let newID) = newValue,
+               let working = model.workingCopy,
+               working.id != newID,
+               model.isDirty {
+                pendingSwitchTarget = newValue
+                model.selection = .layout(working.id)
+                return
+            }
+            model.onSelectionChanged()
+        }
+        .confirmationDialog(
+            "Unsaved layout changes",
+            isPresented: Binding(
+                get: { pendingSwitchTarget != nil },
+                set: { presenting in if !presenting { pendingSwitchTarget = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Save and switch") {
+                let target = pendingSwitchTarget
+                pendingSwitchTarget = nil
+                model.save()
+                if let target { model.selection = target }
+            }
+            Button("Discard changes", role: .destructive) {
+                let target = pendingSwitchTarget
+                pendingSwitchTarget = nil
+                model.revert()
+                if let target { model.selection = target }
+            }
+            Button("Stay on this layout", role: .cancel) {
+                pendingSwitchTarget = nil
+            }
+        } message: {
+            Text("You have unsaved edits to this layout. Switching will lose them unless you save first.")
+        }
         .confirmationDialog(
             "Zone is bound to hotkey(s)",
             isPresented: $showingDeleteZoneWarning,
@@ -43,75 +92,170 @@ struct LayoutEditorView: View {
 
     private var sidebar: some View {
         VStack(spacing: 0) {
-            List(selection: Binding(
-                get: { model.selection },
-                set: { model.select(layoutID: $0) }
-            )) {
-                ForEach(model.layouts) { layout in
-                    HStack {
-                        Text(layout.name)
-                        Spacer()
-                        Text("\(layout.zones.count)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+            List(selection: $model.selection) {
+
+                Section("Layouts") {
+                    ForEach(model.layouts) { layout in
+                        HStack {
+                            Text(layout.name)
+                            Spacer()
+                            Text("\(layout.zones.count)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .tag(EditorSelection.layout(layout.id))
                     }
-                    .tag(Optional(layout.id))
+                    .onMove { source, destination in
+                        model.moveLayouts(from: source, to: destination)
+                    }
                 }
-                .onMove { source, destination in
-                    model.moveLayouts(from: source, to: destination)
+
+                Section("App Rules") {
+                    if model.appRules.isEmpty {
+                        Text("No rules yet")
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
+                    }
+                    ForEach(model.appRules) { rule in
+                        HStack {
+                            Text(rule.bundleID.isEmpty ? "(no bundle)" : rule.bundleID)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer()
+                            if let zoneName = model.zoneName(forID: rule.preferredZoneID) {
+                                Text(zoneName)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .tag(EditorSelection.appRule(rule.id))
+                    }
+                }
+
+                Section("Bindings") {
+                    if model.nonTrivialBindings.isEmpty {
+                        Text("No cycle or focus bindings")
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
+                    }
+                    ForEach(model.nonTrivialBindings) { binding in
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(KeyboardShortcuts.getShortcut(
+                                for: KeyboardShortcuts.Name(binding.shortcutName)
+                            )?.description ?? "(no shortcut)")
+                            .font(.system(.body, design: .monospaced))
+                            Text("\(binding.role.rawValue) · \(binding.targets.count) zone\(binding.targets.count == 1 ? "" : "s")")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        .tag(EditorSelection.binding(binding.id))
+                    }
                 }
             }
+            // Force `.inset` so SwiftUI doesn't infer a sidebar style now
+            // that the parent isn't a NavigationSplitView. Sidebar style
+            // adds back the rounded vibrancy chrome we're trying to drop.
+            .listStyle(.inset)
 
             Divider()
+            sidebarToolbar
+        }
+    }
 
-            HStack(spacing: 4) {
-                Button {
-                    model.newLayout()
-                } label: {
-                    Image(systemName: "plus")
-                }
-                .buttonStyle(.borderless)
-                .help("New layout")
-
-                Button {
-                    model.deleteSelectedLayout()
-                } label: {
-                    Image(systemName: "minus")
-                }
-                .buttonStyle(.borderless)
-                .disabled(model.selection == nil)
-                .help("Delete selected layout")
-
-                Spacer()
-
-                Button {
-                    model.moveSelectedLayout(direction: .up)
-                } label: {
-                    Image(systemName: "chevron.up")
-                }
-                .buttonStyle(.borderless)
-                .disabled(!model.canMoveSelectedLayout.up)
-                .help("Move layout up — first match wins for ⌥⌃1..0")
-
-                Button {
-                    model.moveSelectedLayout(direction: .down)
-                } label: {
-                    Image(systemName: "chevron.down")
-                }
-                .buttonStyle(.borderless)
-                .disabled(!model.canMoveSelectedLayout.down)
-                .help("Move layout down")
+    private var sidebarToolbar: some View {
+        HStack(spacing: 4) {
+            Menu {
+                Button("New layout") { model.newLayout() }
+                Button("New app rule") { model.addAppRule() }
+                Button("New binding") { model.addBinding() }
+            } label: {
+                Image(systemName: "plus")
             }
-            .padding(8)
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Add layout, app rule, or binding")
+
+            Button {
+                deleteSelected()
+            } label: {
+                Image(systemName: "minus")
+            }
+            .buttonStyle(.borderless)
+            .disabled(model.selection == nil)
+            .help("Delete selected item")
+
+            Spacer()
+
+            // ↑↓ only meaningful for layouts (order = snap-by-index match
+            // order). For rules and bindings, reorder has no observable
+            // semantics, so the buttons are inert there.
+            Button {
+                model.moveSelectedLayout(direction: .up)
+            } label: {
+                Image(systemName: "chevron.up")
+            }
+            .buttonStyle(.borderless)
+            .disabled(!model.canMoveSelectedLayout.up)
+            .help("Move layout up — first match wins for ⌥⌃1..0")
+
+            Button {
+                model.moveSelectedLayout(direction: .down)
+            } label: {
+                Image(systemName: "chevron.down")
+            }
+            .buttonStyle(.borderless)
+            .disabled(!model.canMoveSelectedLayout.down)
+            .help("Move layout down")
+        }
+        .padding(8)
+    }
+
+    private func deleteSelected() {
+        switch model.selection {
+        case .layout:
+            model.deleteSelectedLayout()
+        case .appRule(let id):
+            model.deleteAppRule(id: id)
+        case .binding(let id):
+            model.deleteBinding(id: id)
+        case .none:
+            break
         }
     }
 
     // MARK: Detail
 
+    @ViewBuilder
     private var detail: some View {
+        switch model.selection {
+        case .layout:
+            if model.workingCopy != nil {
+                layoutDetail
+            } else {
+                ContentUnavailableView(
+                    "No layout selected",
+                    systemImage: "rectangle.3.group",
+                    description: Text("Pick a layout in the sidebar or create a new one.")
+                )
+            }
+        case .appRule(let id):
+            AppRulesEditorView(model: model, ruleID: id)
+        case .binding(let id):
+            BindingsEditorView(model: model, bindingID: id)
+        case .none:
+            ContentUnavailableView(
+                "Nothing selected",
+                systemImage: "sidebar.left",
+                description: Text("Pick a layout, rule, or binding in the sidebar.")
+            )
+        }
+    }
+
+    private var layoutDetail: some View {
         HSplitView {
             inspector
-                .frame(minWidth: 320, idealWidth: 360)
+                .frame(minWidth: 240, idealWidth: 280, maxWidth: 360)
             preview
                 .frame(minWidth: 360)
         }
@@ -119,7 +263,7 @@ struct LayoutEditorView: View {
 
     private var inspector: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 12) {
                 layoutFields
                 Divider()
                 zoneList
@@ -134,8 +278,13 @@ struct LayoutEditorView: View {
         Group {
             if let copy = model.workingCopy {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Layout").font(.headline)
-                    TextField("Name", text: Binding(
+                    // No "Layout" header — the title-styled name field is
+                    // self-evidently the layout name, and dropping the
+                    // header buys vertical space the inspector badly needs.
+                    // Rounded border (not .plain) so the field reads as
+                    // editable — without it the title looked like a static
+                    // label.
+                    TextField("Layout name", text: Binding(
                         get: { copy.name },
                         set: { newValue in
                             var c = copy
@@ -144,6 +293,7 @@ struct LayoutEditorView: View {
                         }
                     ))
                     .textFieldStyle(.roundedBorder)
+                    .font(.title2.bold())
 
                     predicateEditor(copy: copy)
                     spacingEditor(copy: copy)
@@ -238,11 +388,11 @@ struct LayoutEditorView: View {
             switch copy.displayPredicate {
             case .anyDisplay:
                 EmptyView()
-            case .aspectRatioAtLeast(let min):
+            case .aspectRatioAtLeast(let minimum):
                 HStack {
                     Text("≥")
                     TextField("min", value: Binding(
-                        get: { min },
+                        get: { minimum },
                         set: { newValue in
                             var c = copy
                             c.displayPredicate = .aspectRatioAtLeast(min: newValue)
@@ -433,6 +583,7 @@ struct LayoutEditorView: View {
                     ))
 
                     if let override = zone.sizeOverride {
+                        let detected = model.detectedPixelSize(forZoneID: id)
                         HStack {
                             Text("W")
                             TextField("width", value: Binding(
@@ -457,6 +608,23 @@ struct LayoutEditorView: View {
                             .frame(width: 80)
                             .textFieldStyle(.roundedBorder)
                             Text("px").foregroundStyle(.secondary)
+
+                            Spacer()
+
+                            Button {
+                                guard let size = detected else { return }
+                                model.updateZone(id: id) { z in
+                                    z.sizeOverride = Zone.PixelSize(
+                                        width: round(size.width),
+                                        height: round(size.height)
+                                    )
+                                }
+                            } label: {
+                                Label("Detect", systemImage: "viewfinder")
+                            }
+                            .controlSize(.small)
+                            .disabled(detected == nil)
+                            .help("Pull the zone's natural pixel size from the preview display.")
                         }
                     }
                 }
@@ -638,9 +806,9 @@ struct LayoutEditorView: View {
     }
 }
 
-// MARK: - Predicate-kind helper
+// MARK: - Predicate-kind helper (shared with AppRulesEditorView)
 
-private enum PredicateKind: Hashable {
+enum PredicateKind: Hashable {
     case any
     case aspect
     case specific

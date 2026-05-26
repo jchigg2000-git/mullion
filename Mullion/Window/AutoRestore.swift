@@ -10,12 +10,12 @@ final class AutoRestore {
     private let layoutStore: LayoutStore
     private let appRuleStore: AppRuleStore
     private let historyStore: WindowHistoryStore
-    private let mover: WindowMover
+    private let mover: any WindowMover
 
     init(layoutStore: LayoutStore,
          appRuleStore: AppRuleStore,
          historyStore: WindowHistoryStore,
-         mover: WindowMover) {
+         mover: any WindowMover) {
         self.layoutStore = layoutStore
         self.appRuleStore = appRuleStore
         self.historyStore = historyStore
@@ -51,8 +51,9 @@ final class AutoRestore {
                 let layout = layoutStore.layout(containingZoneID: zone.id)
                 let targetAppKit = FrameResolver.appKitFrame(for: zone, in: layout, on: screen)
                 guard let targetAX = Geometry.appKitToAX(targetAppKit) else { continue }
-                if !mover.move(ax, to: targetAX) {
-                    log.debug("auto-restore did not land near target for \(bundleID, privacy: .public) zone=\(zone.name, privacy: .public)")
+                let profile = appRuleStore.profile(forBundleID: bundleID, on: screen)
+                if !mover.move(ax, to: targetAX, profile: profile) {
+                    log.debug("auto-restore did not land near target for \(bundleID, privacy: .public) zone=\(zone.name, privacy: .public) profile=\(profile.rawValue, privacy: .public)")
                 }
             }
         }

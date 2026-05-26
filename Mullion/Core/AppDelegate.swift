@@ -18,6 +18,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var dispatcher: ActionDispatcher?
     private var onboardingWindow: OnboardingWindow?
     private var layoutEditorWindow: LayoutEditorWindow?
+    private var configWatcher: ConfigFileWatcher?
+    private weak var editorModel: LayoutEditorModel?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         log.notice("Mullion launched. Accessibility trusted: \(AccessibilityGate.shared.isTrusted, privacy: .public)")
@@ -41,7 +43,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             layoutStore: layoutStore,
             bindingsProvider: { [bindingStore] in bindingStore.bindings },
             history: historyStore,
-            focusIndex: focusIndex
+            focusIndex: focusIndex,
+            appRuleStore: appRuleStore
         )
         self.dispatcher = dispatcher
 
@@ -71,6 +74,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         showOnboardingIfNeeded()
 
+        // FSEvents-driven auto-reload of every JSON config file. Manual
+        // "Reload" stays available as a fallback.
+        configWatcher = ConfigFileWatcher(directory: ApplicationSupport.directory) { [weak self] in
+            self?.reloadAll()
+        }
+
         if settingsStore.autoRestoreEnabled, AccessibilityGate.shared.isTrusted {
             AutoRestore(
                 layoutStore: layoutStore,
@@ -96,7 +105,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         layoutStore.reload()
         bindingStore.reload()
         appRuleStore.reload()
+        historyStore.reload()
+        settingsStore.reload()
         hotkeyManager?.register(bindingStore.bindings)
+        editorModel?.refreshFromStores()
         log.notice("Configuration reloaded")
     }
 
@@ -108,7 +120,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let model = LayoutEditorModel(
             layoutStore: layoutStore,
             bindingStore: bindingStore,
-            bindingsProvider: { [bindingStore] in bindingStore.bindings },
+            appRuleStore: appRuleStore,
             onBindingsChanged: { [weak self] in
                 guard let self else { return }
                 self.hotkeyManager?.register(self.bindingStore.bindings)
@@ -117,5 +129,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let window = LayoutEditorWindow(model: model)
         window.show()
         layoutEditorWindow = window
+        editorModel = model
     }
 }

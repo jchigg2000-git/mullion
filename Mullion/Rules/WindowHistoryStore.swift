@@ -9,6 +9,8 @@ final class WindowHistoryStore {
 
     var placements: [LearnedPlacement] { store.value.placements }
 
+    func reload() { store.reload() }
+
     func placement(bundleID: String, displayUUID: String) -> LearnedPlacement? {
         store.value.placements.first {
             $0.bundleID == bundleID && $0.displayUUID == displayUUID

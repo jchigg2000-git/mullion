@@ -13,4 +13,6 @@ final class SettingsStore {
         get { store.value.autoRestoreEnabled }
         set { store.update { $0.autoRestoreEnabled = newValue } }
     }
+
+    func reload() { store.reload() }
 }

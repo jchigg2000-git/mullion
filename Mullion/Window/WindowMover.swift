@@ -3,13 +3,19 @@ import CoreGraphics
 /// Strategy for placing a window into an AX-space rect. Implementations
 /// return `true` if the window landed close enough to the target.
 protocol WindowMover {
-    func move(_ window: AXWindow, to axFrame: CGRect) -> Bool
+    func move(_ window: AXWindow, to axFrame: CGRect, profile: CompatProfile) -> Bool
+}
+
+extension WindowMover {
+    func move(_ window: AXWindow, to axFrame: CGRect) -> Bool {
+        move(window, to: axFrame, profile: .standard)
+    }
 }
 
 /// Direct write. Works for most apps.
 struct StandardWindowMover: WindowMover {
-    func move(_ window: AXWindow, to axFrame: CGRect) -> Bool {
-        WindowMutator.set(window, axFrame: axFrame)
+    func move(_ window: AXWindow, to axFrame: CGRect, profile: CompatProfile) -> Bool {
+        WindowMutator.set(window, axFrame: axFrame, profile: profile)
         guard let result = window.axFrame else { return false }
         let dx = abs(result.origin.x - axFrame.origin.x)
         let dy = abs(result.origin.y - axFrame.origin.y)
@@ -22,23 +28,23 @@ struct StandardWindowMover: WindowMover {
 /// Fixed-size apps (Calculator, some preferences windows) ignore size writes.
 /// Center the current-size window within the target rect.
 struct CenteringFixedSizeWindowMover: WindowMover {
-    func move(_ window: AXWindow, to axFrame: CGRect) -> Bool {
+    func move(_ window: AXWindow, to axFrame: CGRect, profile: CompatProfile) -> Bool {
         guard let current = window.axFrame else { return false }
         let centeredX = axFrame.origin.x + (axFrame.size.width - current.size.width) / 2
         let centeredY = axFrame.origin.y + (axFrame.size.height - current.size.height) / 2
         let centered = CGRect(origin: CGPoint(x: centeredX, y: centeredY), size: current.size)
-        WindowMutator.set(window, axFrame: centered)
+        WindowMutator.set(window, axFrame: centered, profile: profile)
         return true
     }
 }
 
 /// Try movers in order, returning on the first success.
 struct ChainedWindowMover: WindowMover {
-    let movers: [WindowMover]
+    let movers: [any WindowMover]
 
-    func move(_ window: AXWindow, to axFrame: CGRect) -> Bool {
+    func move(_ window: AXWindow, to axFrame: CGRect, profile: CompatProfile) -> Bool {
         for mover in movers {
-            if mover.move(window, to: axFrame) { return true }
+            if mover.move(window, to: axFrame, profile: profile) { return true }
         }
         return false
     }
