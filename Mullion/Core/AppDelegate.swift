@@ -21,6 +21,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appRuleStore: appRuleStore,
         historyStore: historyStore
     )
+    private lazy var gridOverlayController = GridOverlayController(
+        layoutStore: layoutStore,
+        settingsStore: settingsStore,
+        appRuleStore: appRuleStore,
+        historyStore: historyStore
+    )
 
     private var statusItemController: StatusItemController?
     private var hotkeyManager: HotkeyManager?
@@ -114,10 +120,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             mouseEventTap.mount()
         }
 
-        // Phase E step #25: drag-to-snap overlay subscribes to mouse events.
-        // Lazy-init the controller and forward callbacks. Modifier-gating
-        // happens inside the controller (default ⌥).
+        // Phase E #25 + #26: drag-to-snap (⌃ alone) and hold-modifier grid
+        // (⌃⌥) both subscribe to mouse events. `MouseEventTap` exposes a
+        // single callback slot per event type, so we fan out here. Exact-
+        // bitmask matching in `ModifierMask` ensures only one of the two
+        // controllers activates for any given modifier state.
         let drag = dragOverlayController
+        let grid = gridOverlayController
         mouseEventTap.onMouseDown = { [weak drag] point, flags in
             drag?.handleMouseDown(at: point, flags: flags)
         }
@@ -127,8 +136,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mouseEventTap.onMouseUp = { [weak drag] point, flags in
             drag?.handleMouseUp(at: point, flags: flags)
         }
-        mouseEventTap.onFlagsChanged = { [weak drag] flags in
+        mouseEventTap.onFlagsChanged = { [weak drag, weak grid] flags in
             drag?.handleFlagsChanged(flags)
+            grid?.handleFlagsChanged(flags)
         }
 
         // FSEvents-driven auto-reload of every JSON config file. Manual
