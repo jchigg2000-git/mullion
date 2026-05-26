@@ -1,6 +1,7 @@
 import XCTest
 @testable import Mullion
 
+@MainActor
 final class JSONStoreTests: XCTestCase {
 
     private var tempURL: URL!

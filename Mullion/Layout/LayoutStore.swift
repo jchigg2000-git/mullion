@@ -1,6 +1,7 @@
 import Foundation
 import os
 
+@MainActor
 final class LayoutStore {
     private let store: JSONStore<LayoutCatalog>
 
@@ -57,8 +58,10 @@ final class LayoutStore {
     }
 
     /// Loads `DefaultLayouts.json` from the app bundle. Empty array when run
-    /// outside a bundle (unit tests).
-    static func bundledDefaults() -> [Layout] {
+    /// outside a bundle (unit tests). `nonisolated` so it can serve as the
+    /// default argument for `init(url:defaults:)` (default-arg expressions
+    /// evaluate outside the type's actor context).
+    nonisolated static func bundledDefaults() -> [Layout] {
         guard let url = Bundle.main.url(forResource: "DefaultLayouts", withExtension: "json") else {
             return []
         }

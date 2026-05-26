@@ -1,5 +1,6 @@
 import Foundation
 
+@MainActor
 final class WindowHistoryStore {
     private let store: JSONStore<LearnedPlacementCatalog>
 

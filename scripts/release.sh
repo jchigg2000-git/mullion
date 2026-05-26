@@ -3,7 +3,7 @@
 #
 # Usage:
 #   VERSION=0.2.0 \
-#   DEVELOPER_ID_APP="Developer ID Application: Your Name (TEAMID)" \
+#   DEVELOPER_ID_APP="Developer ID Application: Justin Higgins (34RWZN7B74)" \
 #   NOTARY_KEYCHAIN_PROFILE=mullion-notary \
 #   make release
 #
@@ -187,7 +187,7 @@ the real GitHub Releases asset URL once you've uploaded the DMG):
   <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
   <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
   <enclosure
-    url="https://github.com/OWNER/REPO/releases/download/v$VERSION/$RELEASE_FILENAME"
+    url="https://github.com/jchigg2000-git/mullion/releases/download/v$VERSION/$RELEASE_FILENAME"
     length="$SIZE_BYTES"
     type="application/octet-stream"
     $SPARKLE_SIG_LINE />

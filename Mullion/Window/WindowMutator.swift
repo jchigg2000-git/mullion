@@ -16,6 +16,7 @@ enum WindowMutator {
     /// verify-and-retry. `.systemWindowManager` is a Phase G escape hatch —
     /// it's wired through `AppRule` so JSON round-trips, but the mutator
     /// currently falls through to `.standard` (logged once via the caller).
+    @MainActor
     @discardableResult
     static func set(_ window: AXWindow,
                     axFrame frame: CGRect,
@@ -42,15 +43,18 @@ enum WindowMutator {
 
         if profile == .aggressive {
             // Verify-and-retry: if the first write didn't land near target,
-            // schedule a single retry on the main runloop ~40ms later so the
+            // schedule a single retry on the main actor ~40ms later so the
             // EUI toggle has settled. Fire-and-forget — the dispatcher's
             // return value reflects the immediate write; the retry quietly
             // fixes Office/Electron windows that ignore the first attempt.
-            // Single retry cap (no Task loop).
+            // Single retry cap (no Task loop). Uses Task { @MainActor }
+            // rather than DispatchQueue.main.asyncAfter so the AXUIElement
+            // capture stays inside MainActor isolation (it isn't Sendable).
             if let landed = window.axFrame, !isClose(landed, to: frame) {
                 let target = frame
                 let element = window.element
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.04) {
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(40))
                     write(element, size: target.size)
                     write(element, position: target.origin)
                     write(element, size: target.size)

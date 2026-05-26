@@ -5,6 +5,7 @@ import os
 /// Walks running apps on launch and re-applies the zone resolved by
 /// `PlacementResolver` (AppRule → LearnedPlacement). Apps with no rule and
 /// no history are left alone.
+@MainActor
 final class AutoRestore {
     private let log = Logger(subsystem: "com.mullion.Mullion", category: "auto-restore")
     private let layoutStore: LayoutStore

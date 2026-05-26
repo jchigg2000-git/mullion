@@ -24,7 +24,7 @@ Find the cert's full common name; you'll need it for env vars:
 security find-identity -v -p codesigning | grep "Developer ID Application"
 ```
 
-It looks like: `Developer ID Application: Your Name (ABC1234567)`.
+It looks like: `Developer ID Application: Justin Higgins (34RWZN7B74)`.
 
 ### 2. Notarization credentials
 
@@ -97,7 +97,7 @@ Once setup is done:
 
 ```sh
 VERSION=0.2.0 \
-DEVELOPER_ID_APP="Developer ID Application: Your Name (TEAMID)" \
+DEVELOPER_ID_APP="Developer ID Application: Justin Higgins (34RWZN7B74)" \
 NOTARY_KEYCHAIN_PROFILE=mullion-notary \
 make release
 ```
@@ -123,8 +123,9 @@ Output: `release-build/Mullion-<VERSION>.dmg`.
 1. Create a git tag: `git tag v<VERSION> && git push --tags`
 2. Create a GitHub Release for that tag and upload the DMG as a release
    asset.
-3. Paste the `<item>` snippet into `docs/appcast.xml` (replace the
-   placeholder `OWNER/REPO` URL with the real one).
+3. Paste the `<item>` snippet into `docs/appcast.xml` (the enclosure URL
+   already points at `jchigg2000-git/mullion`; double-check the tag
+   matches `v<VERSION>`).
 4. Commit the appcast update and push (or wait for the Pages deploy if
    you configured Pages).
 

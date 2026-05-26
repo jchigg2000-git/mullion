@@ -1,6 +1,7 @@
 import AppKit
 
 /// Resolution order: explicit AppRule → LearnedPlacement → nothing.
+@MainActor
 final class PlacementResolver {
     private let ruleStore: AppRuleStore
     private let historyStore: WindowHistoryStore

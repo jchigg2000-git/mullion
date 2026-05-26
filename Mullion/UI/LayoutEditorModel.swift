@@ -59,11 +59,6 @@ final class LayoutEditorModel {
     /// to the first screen at render time.
     var previewScreenUUID: String?
 
-    /// Whatever was assigned to `DisplayRegistry.shared.onChange` before we
-    /// took it over — re-invoked so we don't silently steal events from
-    /// another subscriber, and restored on deinit.
-    private let previousOnChange: (() -> Void)?
-
     init(layoutStore: LayoutStore,
          bindingStore: BindingStore,
          appRuleStore: AppRuleStore,
@@ -86,17 +81,12 @@ final class LayoutEditorModel {
             self.workingCopy = first
             self.selectedZoneID = first.zones.first?.id
         }
-        self.previousOnChange = DisplayRegistry.shared.onChange
-        let chained = self.previousOnChange
-        DisplayRegistry.shared.onChange = { [weak self] in
-            chained?()
+        // Lifetime-scoped subscription: dropped automatically when `self`
+        // deinits via the weak-host check in `DisplayRegistry`.
+        DisplayRegistry.shared.observe(host: self) { [weak self] in
             guard let self else { return }
             self.screens = DisplayRegistry.shared.screens
         }
-    }
-
-    deinit {
-        DisplayRegistry.shared.onChange = previousOnChange
     }
 
     // MARK: Selection

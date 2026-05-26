@@ -7,6 +7,12 @@ import SwiftUI
 final class LayoutEditorWindow: NSWindowController, NSWindowDelegate {
     private let model: LayoutEditorModel
 
+    /// Fired from `windowWillClose(_:)` so the host (AppDelegate) can drop
+    /// its strong reference and let the window + model deallocate. Without
+    /// this the model lives forever and its `DisplayRegistry` subscription
+    /// never deinits.
+    var onClose: (() -> Void)?
+
     init(model: LayoutEditorModel) {
         self.model = model
         let window = NSWindow(
@@ -35,6 +41,10 @@ final class LayoutEditorWindow: NSWindowController, NSWindowDelegate {
     }
 
     // MARK: NSWindowDelegate
+
+    func windowWillClose(_ notification: Notification) {
+        onClose?()
+    }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         guard model.isDirty else { return true }

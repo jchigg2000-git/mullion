@@ -3,6 +3,7 @@ import Foundation
 /// Atomic, debounced Codable storage. Loads on init, writes 500ms after the
 /// last mutation. `reload()` is the menu-driven refresh path. Synchronous;
 /// all calls must happen on the main thread.
+@MainActor
 final class JSONStore<Model: Codable> {
     private let url: URL
     private(set) var value: Model

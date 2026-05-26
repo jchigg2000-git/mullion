@@ -1,5 +1,6 @@
 import Foundation
 
+@MainActor
 final class SettingsStore {
     private let store: JSONStore<AppSettings>
 

@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 
+@MainActor
 final class AppRuleStore {
     private let store: JSONStore<AppRuleCatalog>
 

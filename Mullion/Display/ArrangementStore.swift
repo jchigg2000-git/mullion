@@ -1,5 +1,6 @@
 import Foundation
 
+@MainActor
 final class ArrangementStore {
     private let store: JSONStore<ArrangementCatalog>
 

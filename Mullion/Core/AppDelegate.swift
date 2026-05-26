@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let arrangementStore = ArrangementStore()
     private let focusIndex = FocusIndex()
     private let updaterController = UpdaterController()
+    private let mouseEventTap = MouseEventTap()
     private lazy var arrangementRegistry = ArrangementRegistry(arrangementStore: arrangementStore)
 
     private var statusItemController: StatusItemController?
@@ -88,6 +89,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if trusted {
                 self?.onboardingWindow?.close()
                 self?.onboardingWindow = nil
+                // Mount/remount the mouse tap now that we have AX trust.
+                // `mount()` is idempotent.
+                self?.mouseEventTap.mount()
             } else {
                 // Rebuilds and TCC resets revoke trust mid-session. Re-surface
                 // onboarding so the user gets a signal instead of silent chords.
@@ -96,6 +100,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         showOnboardingIfNeeded()
+
+        // Phase E foundation (step #24): mount the shared mouse tap if we
+        // already have AX trust. If not, the trust-change handler above
+        // will mount it once the user grants access via onboarding.
+        if AccessibilityGate.shared.isTrusted {
+            mouseEventTap.mount()
+        }
 
         // FSEvents-driven auto-reload of every JSON config file. Manual
         // "Reload" stays available as a fallback.
@@ -157,6 +168,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         )
         let window = LayoutEditorWindow(model: model)
+        window.onClose = { [weak self] in
+            // Drop the strong reference so the window + model deallocate,
+            // releasing the model's `DisplayRegistry` observer entry.
+            self?.layoutEditorWindow = nil
+        }
         window.show()
         layoutEditorWindow = window
         editorModel = model

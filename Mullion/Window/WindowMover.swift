@@ -2,11 +2,18 @@ import CoreGraphics
 
 /// Strategy for placing a window into an AX-space rect. Implementations
 /// return `true` if the window landed close enough to the target.
+///
+/// `move` is `@MainActor` (writes through to `WindowMutator`, which touches
+/// AX APIs only-safe on the main thread). The conforming type itself isn't
+/// MainActor — its static factories (`ChainedWindowMover.default`, …) need
+/// to be available as nonisolated default arguments.
 protocol WindowMover {
+    @MainActor
     func move(_ window: AXWindow, to axFrame: CGRect, profile: CompatProfile) -> Bool
 }
 
 extension WindowMover {
+    @MainActor
     func move(_ window: AXWindow, to axFrame: CGRect) -> Bool {
         move(window, to: axFrame, profile: .standard)
     }

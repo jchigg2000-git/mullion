@@ -9,11 +9,16 @@ import os
 /// `.focus` path: next zone in cycle → FocusIndex MRU → raise. The focus
 /// cycle is keyed by binding alone (not by current window) because the
 /// user is rotating through zones, not through windows.
+/// Closure type for the bindings provider — declared as a typealias so
+/// `@escaping` and `@MainActor` can co-exist on the parameter (Swift 5.10
+/// doesn't accept the two attribute keywords together inline).
+typealias BindingsProvider = @MainActor () -> [HotkeyBinding]
+
 @MainActor
 final class ActionDispatcher {
     private let log = Logger(subsystem: "com.mullion.Mullion", category: "dispatcher")
     private let layoutStore: LayoutStore
-    private let bindingsProvider: () -> [HotkeyBinding]
+    private let bindingsProvider: BindingsProvider
     private let mover: any WindowMover
     private let history: WindowHistoryStore?
     private let focusIndex: FocusIndex
@@ -33,7 +38,7 @@ final class ActionDispatcher {
     private let appRuleStore: AppRuleStore?
 
     init(layoutStore: LayoutStore,
-         bindingsProvider: @escaping () -> [HotkeyBinding],
+         bindingsProvider: @escaping BindingsProvider,
          mover: any WindowMover = ChainedWindowMover.default,
          history: WindowHistoryStore? = nil,
          focusIndex: FocusIndex = FocusIndex(),

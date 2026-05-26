@@ -1,6 +1,7 @@
 import XCTest
 @testable import Mullion
 
+@MainActor
 final class ArrangementTests: XCTestCase {
 
     private var tempURL: URL!

@@ -19,6 +19,7 @@ enum DefaultBindingsSeeder {
         "mullion.pane.botLeft", "mullion.pane.botMid", "mullion.pane.botRight",
     ]
 
+    @MainActor
     static func seedIfNeeded(bindingStore: BindingStore, layoutStore: LayoutStore) {
         // Always purge obsolete entries — they exist iff the user was seeded
         // under the old scheme. Cheap and safe to re-check on every launch
@@ -41,6 +42,7 @@ enum DefaultBindingsSeeder {
         UserDefaults.standard.set(true, forKey: didSeedKey)
     }
 
+    @MainActor
     private static func purgeObsoleteBindings(bindingStore: BindingStore) {
         let stale = bindingStore.bindings.filter { obsoleteShortcutNames.contains($0.shortcutName) }
         for binding in stale {
