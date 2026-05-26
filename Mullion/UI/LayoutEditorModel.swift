@@ -7,6 +7,7 @@ enum EditorSelection: Hashable {
     case appRule(UUID)
     case binding(UUID)
     case arrangement(UUID)
+    case workspace(UUID)
 }
 
 /// SwiftUI-facing state for the layout editor. Wraps the app's shared
@@ -26,6 +27,8 @@ final class LayoutEditorModel {
     private let appRuleStore: AppRuleStore
     private let arrangementStore: ArrangementStore
     private let arrangementRegistry: ArrangementRegistry
+    private let workspaceStore: WorkspaceStore
+    private let workspaceController: WorkspaceController
     private let onBindingsChanged: (() -> Void)?
 
     /// All layouts as currently persisted (refreshed on save / revert / external reload).
@@ -41,6 +44,10 @@ final class LayoutEditorModel {
 
     /// All saved arrangements. Edit-immediate — write through.
     private(set) var arrangements: [Arrangement]
+
+    /// All saved workspaces. Edit-immediate — name edits write through;
+    /// item-list mutations only happen via capture (full replace) or delete.
+    private(set) var workspaces: [Workspace]
 
     /// What's currently selected in the editor sidebar. Drives the detail view.
     var selection: EditorSelection?
@@ -64,17 +71,22 @@ final class LayoutEditorModel {
          appRuleStore: AppRuleStore,
          arrangementStore: ArrangementStore,
          arrangementRegistry: ArrangementRegistry,
+         workspaceStore: WorkspaceStore,
+         workspaceController: WorkspaceController,
          onBindingsChanged: (() -> Void)? = nil) {
         self.layoutStore = layoutStore
         self.bindingStore = bindingStore
         self.appRuleStore = appRuleStore
         self.arrangementStore = arrangementStore
         self.arrangementRegistry = arrangementRegistry
+        self.workspaceStore = workspaceStore
+        self.workspaceController = workspaceController
         self.onBindingsChanged = onBindingsChanged
         self.layouts = layoutStore.layouts
         self.appRules = appRuleStore.rules
         self.bindings = bindingStore.bindings
         self.arrangements = arrangementStore.arrangements
+        self.workspaces = workspaceStore.workspaces
         self.screens = DisplayRegistry.shared.screens
         if let first = layoutStore.layouts.first {
             self.selection = .layout(first.id)
@@ -119,7 +131,7 @@ final class LayoutEditorModel {
                 workingCopy = nil
                 selectedZoneID = nil
             }
-        case .appRule, .binding, .arrangement, .none:
+        case .appRule, .binding, .arrangement, .workspace, .none:
             // Switching to a non-layout section preserves any unsaved edits
             // to whichever layout was most recently opened, so the user can
             // bounce back and forth without losing them.
@@ -444,6 +456,7 @@ final class LayoutEditorModel {
         appRules = appRuleStore.rules
         bindings = bindingStore.bindings
         arrangements = arrangementStore.arrangements
+        workspaces = workspaceStore.workspaces
         // arrangements.json may have changed on disk — re-run match against
         // the current display signature so `currentMatch` stays accurate.
         arrangementRegistry.recompute()
@@ -460,6 +473,8 @@ final class LayoutEditorModel {
             if !bindings.contains(where: { $0.id == id }) { selection = nil }
         case .arrangement(let id):
             if !arrangements.contains(where: { $0.id == id }) { selection = nil }
+        case .workspace(let id):
+            if !workspaces.contains(where: { $0.id == id }) { selection = nil }
         case .none:
             break
         }
@@ -663,5 +678,73 @@ final class LayoutEditorModel {
             }
         }
         return screens.first
+    }
+
+    // MARK: Mutations — workspaces (edit-immediate)
+
+    /// Capture the current placements of every running app into a new
+    /// workspace and select it. Name is auto-generated and uniquified the
+    /// same way `captureArrangement` does it; user can rename in the detail.
+    func captureWorkspace() {
+        let base = defaultWorkspaceName()
+        let name = uniqueWorkspaceName(starting: base)
+        let workspace = workspaceController.captureCurrent(name: name)
+        workspaces = workspaceStore.workspaces
+        selection = .workspace(workspace.id)
+    }
+
+    /// Re-snapshot the current placements into the selected workspace,
+    /// overwriting its items. Used when the user has rearranged windows and
+    /// wants the existing workspace name/id to keep matching.
+    func recaptureWorkspace(id: UUID) {
+        guard var workspace = workspaceStore.workspaces.first(where: { $0.id == id }) else { return }
+        // Run a throwaway capture, then transplant its items into the
+        // existing workspace so id + name survive.
+        let snapshot = workspaceController.captureCurrent(name: workspace.name)
+        // captureCurrent persisted `snapshot` as a *new* workspace — remove
+        // that disposable one before saving the in-place update.
+        workspaceStore.remove(workspaceWithID: snapshot.id)
+        workspace.items = snapshot.items
+        workspace.capturedAt = snapshot.capturedAt
+        workspaceStore.upsert(workspace)
+        workspaces = workspaceStore.workspaces
+    }
+
+    /// Apply every item in the workspace to its named display + zone.
+    /// Returns the number of items actually moved (display absent or app
+    /// not running both reduce the count).
+    @discardableResult
+    func restoreWorkspace(id: UUID) -> Int {
+        guard let workspace = workspaceStore.workspaces.first(where: { $0.id == id }) else { return 0 }
+        return workspaceController.restore(workspace)
+    }
+
+    func updateWorkspace(id: UUID, _ transform: (inout Workspace) -> Void) {
+        guard var workspace = workspaceStore.workspaces.first(where: { $0.id == id }) else { return }
+        transform(&workspace)
+        workspaceStore.upsert(workspace)
+        workspaces = workspaceStore.workspaces
+    }
+
+    func deleteWorkspace(id: UUID) {
+        workspaceStore.remove(workspaceWithID: id)
+        workspaces = workspaceStore.workspaces
+        if case .workspace(let selectedID) = selection, selectedID == id {
+            selection = workspaces.first.map { .workspace($0.id) }
+        }
+    }
+
+    private func defaultWorkspaceName() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, h:mm a"
+        return "Workspace · \(formatter.string(from: Date()))"
+    }
+
+    private func uniqueWorkspaceName(starting base: String) -> String {
+        let existing = Set(workspaces.map(\.name))
+        if !existing.contains(base) { return base }
+        var i = 2
+        while existing.contains("\(base) \(i)") { i += 1 }
+        return "\(base) \(i)"
     }
 }

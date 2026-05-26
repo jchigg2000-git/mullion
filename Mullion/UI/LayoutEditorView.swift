@@ -177,6 +177,26 @@ struct LayoutEditorView: View {
                         .tag(EditorSelection.arrangement(arrangement.id))
                     }
                 }
+
+                Section("Workspaces") {
+                    if model.workspaces.isEmpty {
+                        Text("No workspaces captured")
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
+                    }
+                    ForEach(model.workspaces) { workspace in
+                        HStack(spacing: 6) {
+                            Text(workspace.name)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer()
+                            Text("\(workspace.items.count)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .tag(EditorSelection.workspace(workspace.id))
+                    }
+                }
             }
             // Force `.inset` so SwiftUI doesn't infer a sidebar style now
             // that the parent isn't a NavigationSplitView. Sidebar style
@@ -195,13 +215,14 @@ struct LayoutEditorView: View {
                 Button("New app rule") { model.addAppRule() }
                 Button("New binding") { model.addBinding() }
                 Button("Save current displays as arrangement") { model.captureArrangement() }
+                Button("Capture current windows as workspace") { model.captureWorkspace() }
             } label: {
                 Image(systemName: "plus")
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
-            .help("Add layout, app rule, binding, or arrangement")
+            .help("Add layout, app rule, binding, arrangement, or workspace")
 
             Button {
                 deleteSelected()
@@ -248,6 +269,8 @@ struct LayoutEditorView: View {
             model.deleteBinding(id: id)
         case .arrangement(let id):
             model.deleteArrangement(id: id)
+        case .workspace(let id):
+            model.deleteWorkspace(id: id)
         case .none:
             break
         }
@@ -274,6 +297,8 @@ struct LayoutEditorView: View {
             BindingsEditorView(model: model, bindingID: id)
         case .arrangement(let id):
             ArrangementsEditorView(model: model, arrangementID: id)
+        case .workspace(let id):
+            WorkspacesEditorView(model: model, workspaceID: id)
         case .none:
             ContentUnavailableView(
                 "Nothing selected",

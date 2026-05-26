@@ -11,10 +11,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let historyStore = WindowHistoryStore()
     private let settingsStore = SettingsStore()
     private let arrangementStore = ArrangementStore()
+    private let workspaceStore = WorkspaceStore()
     private let focusIndex = FocusIndex()
     private let updaterController = UpdaterController()
     private let mouseEventTap = MouseEventTap()
     private lazy var arrangementRegistry = ArrangementRegistry(arrangementStore: arrangementStore)
+    private lazy var workspaceController = WorkspaceController(
+        layoutStore: layoutStore,
+        workspaceStore: workspaceStore,
+        appRuleStore: appRuleStore
+    )
     private lazy var dragOverlayController = DragOverlayController(
         layoutStore: layoutStore,
         settingsStore: settingsStore,
@@ -175,6 +181,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         historyStore.reload()
         settingsStore.reload()
         arrangementStore.reload()
+        workspaceStore.reload()
         hotkeyManager?.register(bindingStore.bindings)
         // Re-run match in case arrangements.json changed on disk. The
         // editor's refreshFromStores also calls recompute(), but the editor
@@ -195,6 +202,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appRuleStore: appRuleStore,
             arrangementStore: arrangementStore,
             arrangementRegistry: arrangementRegistry,
+            workspaceStore: workspaceStore,
+            workspaceController: workspaceController,
             onBindingsChanged: { [weak self] in
                 guard let self else { return }
                 self.hotkeyManager?.register(self.bindingStore.bindings)
