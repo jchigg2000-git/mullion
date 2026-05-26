@@ -51,12 +51,21 @@ final class ArrangementRegistry {
     func recompute() {
         let signature = Arrangement.currentSignature(from: displayRegistry.screens)
         let match = arrangementStore.arrangement(matching: signature)
+        let previousMatchID = currentMatch?.id
         currentSignature = signature
         currentMatch = match
+        // Gate `onMatched` / `onUnknown` on actual *transitions*. Without
+        // this guard, any FSEvents-driven reloadAll (a grid-snap writing
+        // window-history.json, a settings change, etc.) would re-fire
+        // onMatched and yank windows back into a bound workspace every time
+        // the user moved something themselves — the loop you hit during the
+        // 2026-05-26 bug hunt.
         if let match {
-            log.notice("arrangement matched: \(match.name, privacy: .public) (default layout: \(match.defaultLayoutID?.uuidString ?? "—", privacy: .public))")
-            onMatched?(match, match.defaultLayoutID)
-        } else {
+            if match.id != previousMatchID {
+                log.notice("arrangement matched: \(match.name, privacy: .public) (default layout: \(match.defaultLayoutID?.uuidString ?? "—", privacy: .public))")
+                onMatched?(match, match.defaultLayoutID)
+            }
+        } else if previousMatchID != nil {
             log.notice("no arrangement matches current signature (\(signature.count, privacy: .public) display(s))")
             onUnknown?(signature)
         }

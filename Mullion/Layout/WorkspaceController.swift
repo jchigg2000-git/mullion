@@ -95,6 +95,8 @@ final class WorkspaceController {
     /// If every window of the app is already placed, the item is a no-op.
     @discardableResult
     func restore(_ workspace: Workspace) -> Int {
+        let restoreID = String(UUID().uuidString.prefix(8))
+        log.notice("restore-begin id=\(restoreID, privacy: .public) workspace='\(workspace.name, privacy: .public)' items=\(workspace.items.count, privacy: .public)")
         var applied = 0
         // Group items by bundleID so we can fan out to multiple windows of
         // the same app in a single pass instead of re-enumerating per item.
@@ -102,20 +104,33 @@ final class WorkspaceController {
         for (bundleID, items) in byBundle {
             guard let runningApp = NSWorkspace.shared.runningApplications.first(where: {
                 $0.bundleIdentifier == bundleID
-            }) else { continue }
+            }) else {
+                log.notice("restore-skip id=\(restoreID, privacy: .public) bundle=\(bundleID, privacy: .public) reason=app-not-running items=\(items.count, privacy: .public)")
+                continue
+            }
 
             let appElement = AXUIElementCreateApplication(runningApp.processIdentifier)
             var windowsRef: AnyObject?
             guard AXUIElementCopyAttributeValue(appElement, kAXWindowsAttribute as CFString, &windowsRef) == .success,
-                  let windows = windowsRef as? [AXUIElement] else { continue }
+                  let windows = windowsRef as? [AXUIElement] else {
+                log.notice("restore-skip id=\(restoreID, privacy: .public) bundle=\(bundleID, privacy: .public) reason=ax-windows-fetch-failed")
+                continue
+            }
+            log.notice("restore-bundle id=\(restoreID, privacy: .public) bundle=\(bundleID, privacy: .public) availableWindows=\(windows.count, privacy: .public) items=\(items.count, privacy: .public)")
 
             var available = windows.map { AXWindow(element: $0, pid: runningApp.processIdentifier) }
             for item in items {
                 guard let screen = DisplayRegistry.shared.screen(forUUID: item.displayUUID),
-                      let zone = layoutStore.zone(withID: item.zoneID) else { continue }
+                      let zone = layoutStore.zone(withID: item.zoneID) else {
+                    log.notice("restore-skip-item id=\(restoreID, privacy: .public) bundle=\(bundleID, privacy: .public) reason=display-or-zone-missing displayUUID=\(item.displayUUID, privacy: .public)")
+                    continue
+                }
                 let layout = layoutStore.layout(containingZoneID: item.zoneID)
                 let targetAppKit = FrameResolver.appKitFrame(for: zone, in: layout, on: screen)
-                guard let targetAX = Geometry.appKitToAX(targetAppKit) else { continue }
+                guard let targetAX = Geometry.appKitToAX(targetAppKit) else {
+                    log.notice("restore-skip-item id=\(restoreID, privacy: .public) bundle=\(bundleID, privacy: .public) zone=\(zone.name, privacy: .public) reason=geometry-conversion-failed")
+                    continue
+                }
 
                 // Window selection priority. Apps with multiple windows (esp.
                 // iTerm, Finder) often title every window the same string, so
@@ -148,18 +163,62 @@ final class WorkspaceController {
                     }
                     return available.indices.first
                 }()
-                guard let idx = pickIdx else { continue }
+                guard let idx = pickIdx else {
+                    log.notice("restore-skip-item id=\(restoreID, privacy: .public) bundle=\(bundleID, privacy: .public) zone=\(zone.name, privacy: .public) reason=no-window-available")
+                    continue
+                }
                 let target = available.remove(at: idx)
 
-                let profile = appRuleStore.profile(forBundleID: bundleID, on: screen)
-                if mover.move(target, to: targetAX, profile: profile) {
+                let beforeFrame = target.axFrame
+
+                // Idempotence: window already at target → skip the AX write.
+                // Tolerance matches `StandardWindowMover` (< 2 AX points per
+                // axis); below that, re-issuing the write is a no-op that
+                // can still flash focus / trigger animations on Spaces that
+                // contain the target window.
+                if let before = beforeFrame, Self.framesEqualWithinTolerance(before, targetAX) {
+                    log.notice("restore-item id=\(restoreID, privacy: .public) bundle=\(bundleID, privacy: .public) zone=\(zone.name, privacy: .public) before=\(Self.fmt(before), privacy: .public) target=\(Self.fmt(targetAX), privacy: .public) skipped=already-at-target")
                     applied += 1
-                } else {
-                    log.debug("restore did not land near target for \(bundleID, privacy: .public) zone=\(zone.name, privacy: .public)")
+                    continue
+                }
+
+                let profile = appRuleStore.profile(forBundleID: bundleID, on: screen)
+                let moveResult = mover.move(target, to: targetAX, profile: profile)
+                let afterFrame = target.axFrame
+
+                let beforeStr = beforeFrame.map { Self.fmt($0) } ?? "nil"
+                let afterStr = afterFrame.map { Self.fmt($0) } ?? "nil"
+                let targetStr = Self.fmt(targetAX)
+                let preDelta = beforeFrame.map { Self.delta($0, vs: targetAX) } ?? "nil"
+                let postDelta = afterFrame.map { Self.delta($0, vs: targetAX) } ?? "nil"
+
+                log.notice("restore-item id=\(restoreID, privacy: .public) bundle=\(bundleID, privacy: .public) zone=\(zone.name, privacy: .public) before=\(beforeStr, privacy: .public) target=\(targetStr, privacy: .public) after=\(afterStr, privacy: .public) preΔ=\(preDelta, privacy: .public) postΔ=\(postDelta, privacy: .public) moverOK=\(moveResult, privacy: .public)")
+
+                if moveResult {
+                    applied += 1
                 }
             }
         }
-        log.notice("restored workspace '\(workspace.name, privacy: .public)': \(applied, privacy: .public)/\(workspace.items.count, privacy: .public) item(s) applied")
+        log.notice("restore-end id=\(restoreID, privacy: .public) workspace='\(workspace.name, privacy: .public)' applied=\(applied, privacy: .public)/\(workspace.items.count, privacy: .public)")
         return applied
+    }
+
+    private static func framesEqualWithinTolerance(_ a: CGRect, _ b: CGRect, tolerance: CGFloat = 2) -> Bool {
+        abs(a.origin.x - b.origin.x) < tolerance &&
+        abs(a.origin.y - b.origin.y) < tolerance &&
+        abs(a.size.width - b.size.width) < tolerance &&
+        abs(a.size.height - b.size.height) < tolerance
+    }
+
+    private static func fmt(_ rect: CGRect) -> String {
+        String(format: "(%.0f,%.0f %.0fx%.0f)", rect.origin.x, rect.origin.y, rect.width, rect.height)
+    }
+
+    private static func delta(_ rect: CGRect, vs target: CGRect) -> String {
+        String(format: "(dx=%.0f dy=%.0f dw=%.0f dh=%.0f)",
+               rect.origin.x - target.origin.x,
+               rect.origin.y - target.origin.y,
+               rect.width - target.width,
+               rect.height - target.height)
     }
 }

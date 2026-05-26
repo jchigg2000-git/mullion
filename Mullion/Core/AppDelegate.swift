@@ -55,7 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.layoutStore.layouts.first { $0.id == id }?.name
             } ?? "—"
             self.log.notice("arrangement '\(arrangement.name, privacy: .public)' matched (default layout: \(layoutName, privacy: .public))")
-            self.autoRestoreBoundWorkspaces(for: arrangement)
+            self.autoRestoreBoundWorkspaces(for: arrangement, trigger: "onMatched")
         }
         arrangementRegistry.onUnknown = { [weak self] signature in
             self?.log.notice("unknown display arrangement (\(signature.count, privacy: .public) display(s)) — open the editor to save it")
@@ -166,7 +166,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // auto-restore. Cover the launch case explicitly here, alongside
             // the existing AppRule/Learned auto-restore.
             if let match = arrangementRegistry.currentMatch {
-                autoRestoreBoundWorkspaces(for: match)
+                autoRestoreBoundWorkspaces(for: match, trigger: "launch")
             }
         }
     }
@@ -177,13 +177,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// either gate is off. When multiple workspaces are bound to the same
     /// arrangement (legal but ambiguous), the most-recently-captured one
     /// wins — `capturedAt` is the most defensible tiebreaker.
-    private func autoRestoreBoundWorkspaces(for arrangement: Arrangement) {
+    private func autoRestoreBoundWorkspaces(for arrangement: Arrangement, trigger: String) {
+        log.notice("autoRestore-entry trigger=\(trigger, privacy: .public) arrangement='\(arrangement.name, privacy: .public)' autoRestoreEnabled=\(self.settingsStore.autoRestoreEnabled, privacy: .public) axTrusted=\(AccessibilityGate.shared.isTrusted, privacy: .public)")
         guard settingsStore.autoRestoreEnabled,
-              AccessibilityGate.shared.isTrusted else { return }
+              AccessibilityGate.shared.isTrusted else {
+            log.notice("autoRestore-skip reason=gates-off trigger=\(trigger, privacy: .public)")
+            return
+        }
         let bound = workspaceStore.workspaces.filter { $0.arrangementID == arrangement.id }
-        guard let target = bound.max(by: { $0.capturedAt < $1.capturedAt }) else { return }
+        log.notice("autoRestore-bound count=\(bound.count, privacy: .public) trigger=\(trigger, privacy: .public)")
+        guard let target = bound.max(by: { $0.capturedAt < $1.capturedAt }) else {
+            log.notice("autoRestore-skip reason=no-bound-workspace trigger=\(trigger, privacy: .public)")
+            return
+        }
+        log.notice("autoRestore-fire workspace='\(target.name, privacy: .public)' trigger=\(trigger, privacy: .public) items=\(target.items.count, privacy: .public)")
         workspaceController.restore(target)
-        log.notice("auto-restored workspace '\(target.name, privacy: .public)' on arrangement match")
     }
 
     private func showOnboardingIfNeeded() {
