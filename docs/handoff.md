@@ -1,45 +1,44 @@
-# Handoff — 2026-05-25 22:02 local
+# Handoff — 2026-05-25 22:18 local
 
 ## What shipped (this session)
-- **Phase D — arrangement detection + arrangement → default layout** (build-order steps #22, #23 in `docs/design/v1.md`).
-  - New: `Mullion/Display/Arrangement.swift` (`DisplaySig`, `Arrangement`, `ArrangementCatalog` + 10pt-bucket signature canonicalization).
-  - New: `Mullion/Display/ArrangementStore.swift` (`JSONStore<ArrangementCatalog>` at `~/Library/Application Support/Mullion/arrangements.json`, exact-match `arrangement(matching:)` lookup that canonicalises both sides).
-  - New: `Mullion/Display/ArrangementRegistry.swift` (`@Observable @MainActor`; chains `DisplayRegistry.onChange`; emits `onMatched(arrangement, defaultLayoutID)` / `onUnknown(signature)`; exposes `captureCurrent(name:)`).
-  - New: `Mullion/UI/ArrangementsEditorView.swift` (edit-immediate "Saves automatically" form; name + default-layout picker + read-only signature table + "Recapture from current" affordance; "(matched)" badge on currently-matching arrangement).
-  - Editor: `LayoutEditorModel` + `LayoutEditorView` get an "Arrangements" sidebar section, `.arrangement(UUID)` `EditorSelection` case, and a "Save current displays as arrangement" entry in the `+` menu.
-  - AppDelegate: instantiates `ArrangementStore` + lazy `ArrangementRegistry`, wires `onMatched` / `onUnknown` logging, includes the store in `reloadAll()`, calls `recompute()` on reload + on editor open.
-  - Tests: `MullionTests/ArrangementTests.swift` — 9 tests (bucket rounding, canonical-sort equality, store CRUD/match, order-independent match, catalog JSON roundtrip with + without `defaultLayoutID`).
-- Test count: **52 → 61, all passing.**
-- Project: `xcodegen generate` was required to pull the new files into the locally-generated `Mullion.xcodeproj/project.pbxproj` (gitignored per prior handoff — confirmed via `git check-ignore`). `xcodebuild` reads the local .pbxproj, so any new `Mullion/` file needs `xcodegen generate` before `xcodebuild` will compile it; fresh clones regenerate on first build.
+- `420f27a` — feat: arrangement detection + arrangement->default layout (Phase D). Closes build-order steps #22, #23 in `docs/design/v1.md`. Touches `Mullion/Display/` (3 new files), `Mullion/UI/` (1 new + 2 modified), `Mullion/Core/AppDelegate.swift`, `MullionTests/ArrangementTests.swift`, `docs/handoff.md`. 740 insertions / 2 deletions. Tests: 52 → 61, all pass. Shipped via `/shipit` — ship branch FF-merged, local + remote ship branch deleted, `origin/main` at `420f27a`.
 
 ## In-flight
-None — working tree has only the modified handoff + new Phase D files. No stashes, no `ship/` branches.
+None. Working tree clean on `main`, in sync with `origin/main`, no stashes, no leftover `ship/` branches.
+
+A debug build at `build/dd/Build/Products/Debug/Mullion.app` (gitignored) was launched mid-session to verify the editor visually — same code as `420f27a`. If you want the Mullion process running in the menu bar to track future builds cleanly, kill it (`pkill -x Mullion`) and relaunch from a fresh build.
 
 ## Decisions (this session)
-- "Apply default layout" (step #23) is signalled via `ArrangementRegistry.onMatched`; the registry does NOT mutate layouts itself. AppDelegate today only logs the match — wiring a behavioural side effect (auto-snap, status-menu indicator, AutoRestore using the matched layout) is deliberately deferred until the StatusItem / `LayoutPickerMenu` grows a "current arrangement" surface.
-- Signature is rounded to a 10pt bucket via `DisplaySig.bucket(_:)` to absorb scale/driver noise. `displayUUID` is in the signature so identical-twin panels still distinguish (per Risk #7 in `docs/design/v1.md`).
-- Signature canonicalization: `Arrangement.canonical(_:)` sorts by UUID, so equality is independent of `NSScreen.screens` order. `ArrangementStore.arrangement(matching:)` canonicalises both sides before comparing.
-- Default-layout Picker uses a static all-zeros UUID sentinel for "None" because SwiftUI `Picker` can't carry `nil` through a `Binding<UUID>`. Hoisted to `private static let` to avoid per-render allocation.
-- The Arrangements sidebar item has no order semantics (unlike Layouts where order = snap-by-index match order), so ↑↓ stays inert for it — matches Bindings/Rules behaviour.
+- **"Apply default layout" (step #23) is signalled via callbacks, not direct mutation.** `ArrangementRegistry.onMatched(arrangement, defaultLayoutID)` fires; AppDelegate today only logs the match. The status menu / AutoRestore / a "Set as current" gesture remain unwritten — Phase D wires the data flow but does not commit to a UX surface for "applying" yet.
+- **`DisplaySig` rounds to 10pt buckets and includes `displayUUID`** to absorb scale-factor noise and distinguish identical-twin panels per Risk #7 in `docs/design/v1.md`. Test `test_bucket_rounds_to_nearest_10pt` in `MullionTests/ArrangementTests.swift:21-30` is the canonical reference for the rounding rule.
+- **Default-layout Picker uses a static all-zeros UUID sentinel** for "None" because SwiftUI `Picker` can't carry `nil` through `Binding<UUID>`. Hoisted to `ArrangementsEditorView.noneLayoutSentinel` (static let, no force unwrap).
+- No new auto-memory entries this session. Existing memory still applicable: [[mullion-editor-ui-conventions]] (used to build the Arrangements sidebar section), [[mullion-release-pipeline]], [[feedback-stop-renagging]].
 
 ## Don't break
-- `EditorSelection.arrangement(UUID)` must use a non-Optional tag in the `List(selection:)` like the other cases (`Mullion/UI/LayoutEditorView.swift:158-180`) — wrapping in `Optional(...)` re-introduces the tap-routing breakage called out in the prior handoff.
-- `ArrangementRegistry` and `LayoutEditorModel` both chain `DisplayRegistry.shared.onChange` using the save-and-restore-on-deinit pattern. Safe today because: `AR` is created lazily at launch and never released; `EM` is created on first editor open and never nilled (per deferred reviewer item #7). Order is `EM.deinit < AR.deinit`. If/when a third subscriber appears, or `EM` gains a true close lifecycle, refactor `DisplayRegistry.onChange` to a multicast token list before chaining (note in `ArrangementRegistry.swift:14-25`).
-- After adding files in `Mullion/`, run `xcodegen generate` before `xcodebuild`. Forgetting this manifests as `Cannot find 'Foo' in scope` errors at compile time even when the file exists on disk.
+- **`EditorSelection.arrangement(UUID)` must use a non-Optional tag** in `List(selection:)` like the other cases (`Mullion/UI/LayoutEditorView.swift:181-200`). Wrapping in `Optional(...)` breaks tap-routing after sidebar mutations under `@Observable` — same trap called out for the other editor sections.
+- **`ArrangementRegistry` and `LayoutEditorModel` both chain `DisplayRegistry.shared.onChange`** with the save-and-restore-on-deinit pattern (`Mullion/Display/ArrangementRegistry.swift:25-37`, `Mullion/UI/LayoutEditorModel.swift:78-89`). Safe today because `AR` outlives `EM`. If a third subscriber appears, or `EM` ever gets nilled on close (currently kept alive by deferred reviewer item #7), refactor `DisplayRegistry.onChange` to a multicast token list **before** adding the third chain.
+- **After adding files in `Mullion/`, run `xcodegen generate` before `xcodebuild`.** `Mullion.xcodeproj/project.pbxproj` is gitignored (`git check-ignore` confirmed); the .pbxproj on disk is locally generated from `project.yml`. Skipping `xcodegen generate` produces phantom "Cannot find 'X' in scope" errors at compile time even when the file exists.
 
 ## Next session: start here
-Phase D is shipped. Per `docs/design/v1.md` build order, **Phase E — mouse-driven UX** is next (steps #24, #25, #26): mount the shared `CGEventTap`, then drag-to-snap overlay, then hold-modifier-grid overlay. This is the heaviest UI chunk in v1 and the foundation for the discoverability story (a user without hotkey muscle memory needs the overlay).
+Per `docs/design/v1.md` build order, **Phase E — mouse-driven UX** (steps #24, #25, #26) is the next chunk: mount the shared `CGEventTap`, then drag-to-snap overlay, then hold-modifier grid overlay. This is the heaviest UI work in v1 and unlocks the discoverability story for users without hotkey muscle memory.
 
-Alternative chunks worth considering before Phase E:
-1. **Status-menu integration of `currentMatch`** — surface "Arrangement: Home desk" in the menu-bar dropdown; offer a "Save current as…" affordance when `currentMatch == nil`. Maybe 20 minutes; closes the user-facing loop on Phase D rather than relying on log lines.
-2. **Wire AppDelegate `onMatched` to a real side effect** — e.g. when a match has `defaultLayoutID`, move that layout to position 0 in the layout list (snap-by-index then resolves to it first). Touches `LayoutStore` and has UX implications worth thinking about before just doing.
-3. **The Swift-6 hygiene pass** (see Deferred) — three reviewer items, now plus `ArrangementStore` itself which is currently un-annotated. Bundle as one PR before Phase E.
+Concrete first steps for Phase E:
+- Read `docs/design/v1.md` "Drag/grid overlay tap" (~lines 254-261) and step #24 (~line 377).
+- Create `Mullion/Overlay/MouseEventTap.swift` (listed in module breakdown, missing from disk). Smoke test: log left-mouse events without breaking input.
+- Then `Mullion/Overlay/DragOverlayController.swift` — borderless `NSWindow`-per-display, highlight on hover, snap on release.
+
+Worth considering before Phase E:
+- **Close the user-facing loop on Phase D.** Today `onMatched` only logs. A 20-minute follow-up: surface "Arrangement: <name>" in the menu-bar dropdown via `LayoutPickerMenu`; offer "Save current as…" when `currentMatch == nil`. See `Mullion/UI/LayoutPickerMenu.swift:38-104` for the menu shape.
+- **Swift 6 hygiene pass.** Four reviewer items now bundle cleanly: `JSONStore` + `AppRuleStore` + `LayoutStore` + (new) `ArrangementStore` lack `@MainActor`; `WindowMutator.swift:53` captures non-Sendable `AXUIElement` across isolation; `AppDelegate.swift` `layoutEditorWindow` never nilled. Doing this **before** Phase E keeps the new mouse code Swift-6-clean from day one.
 
 ## Deferred / open
-- swift-reviewer #5: `JSONStore` + all store classes (incl. new `ArrangementStore`) lack `@MainActor` annotation; safe today (every caller is main-isolated) but Swift 6 strict-concurrency will warn. Bundle with the items below.
+- swift-reviewer #5: `JSONStore` + all four store classes lack `@MainActor`. Safe today (every caller is main-isolated). Swift 6 strict-concurrency will warn.
 - swift-reviewer Phase-C-pass #1: `Mullion/Window/WindowMutator.swift:53` `DispatchQueue.main.asyncAfter` captures `AXUIElement` (non-Sendable) across isolation.
-- swift-reviewer #7: `Mullion/Core/AppDelegate.swift:118` (now shifted) `layoutEditorWindow` is never nilled after close. Note: the Phase D chain-and-restore-deinit invariant in `ArrangementRegistry` partially DEPENDS on this not being fixed; fix together with a multicast `DisplayRegistry.onChange` refactor.
-- Phase D follow-up: the actual behavioural application of `defaultLayoutID` (status-menu indicator, auto-snap on match, etc.) is unscoped. Today it's a log line only. See "Next session" alternative #1 / #2.
+- swift-reviewer #7: `Mullion/Core/AppDelegate.swift` `layoutEditorWindow` is never nilled after close. **Coupled with the chain-and-restore invariant in `ArrangementRegistry`** — fix together with a multicast `DisplayRegistry.onChange` refactor.
+- Phase D follow-up: the behavioural application of `defaultLayoutID` (status-menu indicator, auto-snap on match, AutoRestore integration) is unscoped. Today it's a log line only.
+- `Mullion/Hotkeys/HotkeyBinding.swift:16` `case focus` marked "v1: stub" — intentional, deferred per design.
+- `Mullion/UI/AppRulesEditorView.swift:234` Phase G escape hatch — intentional, deferred per design.
+- `Mullion/Update/UpdaterController.swift:35` Sparkle disabled until `SUFeedURL`/`SUPublicEDKey` are configured. Holding for v1.0 first public release per [[mullion-release-pipeline]].
 
 ## How to verify
 ```
@@ -49,4 +48,4 @@ xcodegen generate
 xcodebuild -project Mullion.xcodeproj -scheme Mullion -destination 'platform=macOS' test 2>&1 | grep "Executed.*tests" | tail -1
 ```
 
-Expected: HEAD at `b00ae8e` (nothing committed this session), working tree shows the modified handoff + new `Mullion/Display/Arrangement*.swift` + new `Mullion/UI/ArrangementsEditorView.swift` + modified `LayoutEditorModel.swift`/`LayoutEditorView.swift`/`AppDelegate.swift` + new `MullionTests/ArrangementTests.swift` + regenerated `Mullion.xcodeproj/project.pbxproj`, `Executed 61 tests, with 0 failures`.
+Expected: HEAD at `420f27a`, clean working tree in sync with `origin/main`, `Executed 61 tests, with 0 failures`.
