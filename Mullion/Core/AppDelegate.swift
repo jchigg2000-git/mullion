@@ -10,8 +10,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let appRuleStore = AppRuleStore()
     private let historyStore = WindowHistoryStore()
     private let settingsStore = SettingsStore()
+    private let arrangementStore = ArrangementStore()
     private let focusIndex = FocusIndex()
     private let updaterController = UpdaterController()
+    private lazy var arrangementRegistry = ArrangementRegistry(arrangementStore: arrangementStore)
 
     private var statusItemController: StatusItemController?
     private var hotkeyManager: HotkeyManager?
@@ -23,6 +25,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         log.notice("Mullion launched. Accessibility trusted: \(AccessibilityGate.shared.isTrusted, privacy: .public)")
+
+        // Force lazy init + run a first match against the current displays
+        // so `currentMatch` is populated for any subscriber that comes up
+        // later in launch (status menu, editor window).
+        arrangementRegistry.recompute()
+        arrangementRegistry.onMatched = { [weak self] arrangement, layoutID in
+            guard let self else { return }
+            let layoutName = layoutID.flatMap { id in
+                self.layoutStore.layouts.first { $0.id == id }?.name
+            } ?? "—"
+            self.log.notice("arrangement '\(arrangement.name, privacy: .public)' matched (default layout: \(layoutName, privacy: .public))")
+        }
+        arrangementRegistry.onUnknown = { [weak self] signature in
+            self?.log.notice("unknown display arrangement (\(signature.count, privacy: .public) display(s)) — open the editor to save it")
+        }
 
         let menu = LayoutPickerMenu(
             layoutStore: layoutStore,
@@ -107,7 +124,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appRuleStore.reload()
         historyStore.reload()
         settingsStore.reload()
+        arrangementStore.reload()
         hotkeyManager?.register(bindingStore.bindings)
+        // Re-run match in case arrangements.json changed on disk. The
+        // editor's refreshFromStores also calls recompute(), but the editor
+        // window may be closed.
+        arrangementRegistry.recompute()
         editorModel?.refreshFromStores()
         log.notice("Configuration reloaded")
     }
@@ -121,6 +143,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             layoutStore: layoutStore,
             bindingStore: bindingStore,
             appRuleStore: appRuleStore,
+            arrangementStore: arrangementStore,
+            arrangementRegistry: arrangementRegistry,
             onBindingsChanged: { [weak self] in
                 guard let self else { return }
                 self.hotkeyManager?.register(self.bindingStore.bindings)

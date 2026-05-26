@@ -151,6 +151,32 @@ struct LayoutEditorView: View {
                         .tag(EditorSelection.binding(binding.id))
                     }
                 }
+
+                Section("Arrangements") {
+                    if model.arrangements.isEmpty {
+                        Text("No arrangements saved")
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
+                    }
+                    ForEach(model.arrangements) { arrangement in
+                        HStack(spacing: 6) {
+                            if model.matchedArrangementID == arrangement.id {
+                                Image(systemName: "checkmark.seal.fill")
+                                    .font(.caption2)
+                                    .foregroundStyle(.green)
+                                    .help("Currently matching the connected displays")
+                            }
+                            Text(arrangement.name)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer()
+                            Text("\(arrangement.signature.count)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .tag(EditorSelection.arrangement(arrangement.id))
+                    }
+                }
             }
             // Force `.inset` so SwiftUI doesn't infer a sidebar style now
             // that the parent isn't a NavigationSplitView. Sidebar style
@@ -168,13 +194,14 @@ struct LayoutEditorView: View {
                 Button("New layout") { model.newLayout() }
                 Button("New app rule") { model.addAppRule() }
                 Button("New binding") { model.addBinding() }
+                Button("Save current displays as arrangement") { model.captureArrangement() }
             } label: {
                 Image(systemName: "plus")
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
-            .help("Add layout, app rule, or binding")
+            .help("Add layout, app rule, binding, or arrangement")
 
             Button {
                 deleteSelected()
@@ -219,6 +246,8 @@ struct LayoutEditorView: View {
             model.deleteAppRule(id: id)
         case .binding(let id):
             model.deleteBinding(id: id)
+        case .arrangement(let id):
+            model.deleteArrangement(id: id)
         case .none:
             break
         }
@@ -243,6 +272,8 @@ struct LayoutEditorView: View {
             AppRulesEditorView(model: model, ruleID: id)
         case .binding(let id):
             BindingsEditorView(model: model, bindingID: id)
+        case .arrangement(let id):
+            ArrangementsEditorView(model: model, arrangementID: id)
         case .none:
             ContentUnavailableView(
                 "Nothing selected",

@@ -6,6 +6,7 @@ enum EditorSelection: Hashable {
     case layout(UUID)
     case appRule(UUID)
     case binding(UUID)
+    case arrangement(UUID)
 }
 
 /// SwiftUI-facing state for the layout editor. Wraps the app's shared
@@ -23,6 +24,8 @@ final class LayoutEditorModel {
     private let layoutStore: LayoutStore
     private let bindingStore: BindingStore
     private let appRuleStore: AppRuleStore
+    private let arrangementStore: ArrangementStore
+    private let arrangementRegistry: ArrangementRegistry
     private let onBindingsChanged: (() -> Void)?
 
     /// All layouts as currently persisted (refreshed on save / revert / external reload).
@@ -35,6 +38,9 @@ final class LayoutEditorModel {
     /// filters this to multi-target / `.focus` bindings (single-zone snaps
     /// stay on the per-zone Recorder inside the Layouts inspector).
     private(set) var bindings: [HotkeyBinding]
+
+    /// All saved arrangements. Edit-immediate — write through.
+    private(set) var arrangements: [Arrangement]
 
     /// What's currently selected in the editor sidebar. Drives the detail view.
     var selection: EditorSelection?
@@ -61,14 +67,19 @@ final class LayoutEditorModel {
     init(layoutStore: LayoutStore,
          bindingStore: BindingStore,
          appRuleStore: AppRuleStore,
+         arrangementStore: ArrangementStore,
+         arrangementRegistry: ArrangementRegistry,
          onBindingsChanged: (() -> Void)? = nil) {
         self.layoutStore = layoutStore
         self.bindingStore = bindingStore
         self.appRuleStore = appRuleStore
+        self.arrangementStore = arrangementStore
+        self.arrangementRegistry = arrangementRegistry
         self.onBindingsChanged = onBindingsChanged
         self.layouts = layoutStore.layouts
         self.appRules = appRuleStore.rules
         self.bindings = bindingStore.bindings
+        self.arrangements = arrangementStore.arrangements
         self.screens = DisplayRegistry.shared.screens
         if let first = layoutStore.layouts.first {
             self.selection = .layout(first.id)
@@ -118,7 +129,7 @@ final class LayoutEditorModel {
                 workingCopy = nil
                 selectedZoneID = nil
             }
-        case .appRule, .binding, .none:
+        case .appRule, .binding, .arrangement, .none:
             // Switching to a non-layout section preserves any unsaved edits
             // to whichever layout was most recently opened, so the user can
             // bounce back and forth without losing them.
@@ -442,6 +453,10 @@ final class LayoutEditorModel {
         layouts = layoutStore.layouts
         appRules = appRuleStore.rules
         bindings = bindingStore.bindings
+        arrangements = arrangementStore.arrangements
+        // arrangements.json may have changed on disk — re-run match against
+        // the current display signature so `currentMatch` stays accurate.
+        arrangementRegistry.recompute()
         switch selection {
         case .layout(let id):
             if !layouts.contains(where: { $0.id == id }) {
@@ -453,9 +468,77 @@ final class LayoutEditorModel {
             if !appRules.contains(where: { $0.id == id }) { selection = nil }
         case .binding(let id):
             if !bindings.contains(where: { $0.id == id }) { selection = nil }
+        case .arrangement(let id):
+            if !arrangements.contains(where: { $0.id == id }) { selection = nil }
         case .none:
             break
         }
+    }
+
+    // MARK: Mutations — arrangements (edit-immediate)
+
+    /// The arrangement currently matching the connected displays, if any.
+    /// Surfaced in the sidebar with a "(matched)" badge.
+    var matchedArrangementID: UUID? { arrangementRegistry.currentMatch?.id }
+
+    /// The unsaved signature of the connected displays. Drives the
+    /// "Capture current" affordance and the read-only signature table for
+    /// new arrangements.
+    var currentDisplaySignature: [DisplaySig] {
+        arrangementRegistry.currentSignature
+    }
+
+    /// Capture the connected displays as a new named arrangement and select
+    /// it. Used by the "+ → New arrangement" menu — there's no value in
+    /// letting the user hand-author a signature, since the only signatures
+    /// they care about are the ones their hardware actually produces.
+    func captureArrangement() {
+        let baseName = defaultArrangementName(for: arrangementRegistry.currentSignature)
+        let name = uniqueArrangementName(starting: baseName)
+        let arrangement = arrangementRegistry.captureCurrent(name: name)
+        arrangements = arrangementStore.arrangements
+        selection = .arrangement(arrangement.id)
+    }
+
+    func updateArrangement(id: UUID, _ transform: (inout Arrangement) -> Void) {
+        guard var arrangement = arrangementStore.arrangements.first(where: { $0.id == id }) else { return }
+        transform(&arrangement)
+        arrangementStore.upsert(arrangement)
+        arrangements = arrangementStore.arrangements
+        arrangementRegistry.recompute()
+    }
+
+    /// Overwrite the selected arrangement's signature with the connected
+    /// displays' current signature. Used when the user reconnects in a
+    /// slightly-different geometry and wants the existing arrangement to
+    /// keep matching rather than create a new one.
+    func recaptureArrangementSignature(id: UUID) {
+        updateArrangement(id: id) { $0.signature = arrangementRegistry.currentSignature }
+    }
+
+    func deleteArrangement(id: UUID) {
+        arrangementStore.remove(arrangementWithID: id)
+        arrangements = arrangementStore.arrangements
+        arrangementRegistry.recompute()
+        if case .arrangement(let selectedID) = selection, selectedID == id {
+            selection = arrangements.first.map { .arrangement($0.id) }
+        }
+    }
+
+    private func defaultArrangementName(for signature: [DisplaySig]) -> String {
+        switch signature.count {
+        case 0: return "No displays"
+        case 1: return "Single display"
+        default: return "\(signature.count) displays"
+        }
+    }
+
+    private func uniqueArrangementName(starting base: String) -> String {
+        let existing = Set(arrangements.map(\.name))
+        if !existing.contains(base) { return base }
+        var i = 2
+        while existing.contains("\(base) \(i)") { i += 1 }
+        return "\(base) \(i)"
     }
 
     // MARK: Fill empty space
