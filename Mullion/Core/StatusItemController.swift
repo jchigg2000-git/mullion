@@ -1,5 +1,6 @@
 import AppKit
 
+@MainActor
 final class StatusItemController {
     private let statusItem: NSStatusItem
     private let menuBuilder: LayoutPickerMenu

@@ -44,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = LayoutPickerMenu(
             layoutStore: layoutStore,
             settingsStore: settingsStore,
+            arrangementRegistry: arrangementRegistry,
             updaterConfigured: updaterController.isConfigured,
             onReload: { [weak self] in self?.reloadAll() },
             onToggleAutoRestore: { [weak self] enabled in
@@ -51,6 +52,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             onOpenEditor: { [weak self] in self?.showLayoutEditor() },
             onSnapToZone: { [weak self] zoneID in self?.dispatcher?.snap(toZoneID: zoneID) },
+            onSaveCurrentArrangement: { [weak self] in
+                guard let self else { return }
+                self.showLayoutEditor()
+                self.editorModel?.captureArrangement()
+            },
             onCheckForUpdates: { [weak self] in self?.updaterController.checkForUpdates() },
             onQuit: { NSApplication.shared.terminate(nil) }
         )

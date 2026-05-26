@@ -4,33 +4,40 @@ import AppKit
 /// zones; clicking a zone snaps the focused window into it — the same code
 /// path a hotkey would take, but reachable without a binding (e.g. for
 /// user-created layouts whose zones nothing is bound to yet).
+@MainActor
 final class LayoutPickerMenu: NSObject {
     private let layoutStore: LayoutStore
     private let settingsStore: SettingsStore
+    private let arrangementRegistry: ArrangementRegistry
     private let updaterConfigured: Bool
     private let onReload: () -> Void
     private let onToggleAutoRestore: (Bool) -> Void
     private let onOpenEditor: () -> Void
     private let onSnapToZone: (UUID) -> Void
+    private let onSaveCurrentArrangement: () -> Void
     private let onCheckForUpdates: () -> Void
     private let onQuit: () -> Void
 
     init(layoutStore: LayoutStore,
          settingsStore: SettingsStore,
+         arrangementRegistry: ArrangementRegistry,
          updaterConfigured: Bool,
          onReload: @escaping () -> Void,
          onToggleAutoRestore: @escaping (Bool) -> Void,
          onOpenEditor: @escaping () -> Void,
          onSnapToZone: @escaping (UUID) -> Void,
+         onSaveCurrentArrangement: @escaping () -> Void,
          onCheckForUpdates: @escaping () -> Void,
          onQuit: @escaping () -> Void) {
         self.layoutStore = layoutStore
         self.settingsStore = settingsStore
+        self.arrangementRegistry = arrangementRegistry
         self.updaterConfigured = updaterConfigured
         self.onReload = onReload
         self.onToggleAutoRestore = onToggleAutoRestore
         self.onOpenEditor = onOpenEditor
         self.onSnapToZone = onSnapToZone
+        self.onSaveCurrentArrangement = onSaveCurrentArrangement
         self.onCheckForUpdates = onCheckForUpdates
         self.onQuit = onQuit
     }
@@ -44,6 +51,26 @@ final class LayoutPickerMenu: NSObject {
 
     private func rebuild(_ menu: NSMenu) {
         menu.removeAllItems()
+
+        if let match = arrangementRegistry.currentMatch {
+            let arrangementItem = NSMenuItem(
+                title: "Arrangement: \(match.name)",
+                action: nil,
+                keyEquivalent: ""
+            )
+            arrangementItem.isEnabled = false
+            menu.addItem(arrangementItem)
+        } else {
+            let saveItem = NSMenuItem(
+                title: "Save current displays as arrangement…",
+                action: #selector(saveCurrentArrangementAction),
+                keyEquivalent: ""
+            )
+            saveItem.target = self
+            menu.addItem(saveItem)
+        }
+
+        menu.addItem(.separator())
 
         let header = NSMenuItem(title: "Layouts", action: nil, keyEquivalent: "")
         header.isEnabled = false
@@ -139,6 +166,10 @@ final class LayoutPickerMenu: NSObject {
 
     @objc private func openEditorAction() {
         onOpenEditor()
+    }
+
+    @objc private func saveCurrentArrangementAction() {
+        onSaveCurrentArrangement()
     }
 
     @objc private func revealConfig() {
