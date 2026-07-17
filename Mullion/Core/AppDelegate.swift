@@ -235,6 +235,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             arrangementRegistry: arrangementRegistry,
             workspaceStore: workspaceStore,
             workspaceController: workspaceController,
+            settingsStore: settingsStore,
             onBindingsChanged: { [weak self] in
                 guard let self else { return }
                 self.hotkeyManager?.register(self.bindingStore.bindings)

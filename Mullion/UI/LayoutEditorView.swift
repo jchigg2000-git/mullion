@@ -197,6 +197,15 @@ struct LayoutEditorView: View {
                         .tag(EditorSelection.workspace(workspace.id))
                     }
                 }
+
+                Section("Preferences") {
+                    HStack(spacing: 6) {
+                        Image(systemName: "gearshape")
+                            .foregroundStyle(.secondary)
+                        Text("Modifiers & auto-restore")
+                    }
+                    .tag(EditorSelection.settings)
+                }
             }
             // Force `.inset` so SwiftUI doesn't infer a sidebar style now
             // that the parent isn't a NavigationSplitView. Sidebar style
@@ -230,7 +239,7 @@ struct LayoutEditorView: View {
                 Image(systemName: "minus")
             }
             .buttonStyle(.borderless)
-            .disabled(model.selection == nil)
+            .disabled(model.selection == nil || model.selection == .settings)
             .help("Delete selected item")
 
             Spacer()
@@ -271,7 +280,8 @@ struct LayoutEditorView: View {
             model.deleteArrangement(id: id)
         case .workspace(let id):
             model.deleteWorkspace(id: id)
-        case .none:
+        case .settings, .none:
+            // Preferences is a singleton pane — nothing to delete.
             break
         }
     }
@@ -299,6 +309,8 @@ struct LayoutEditorView: View {
             ArrangementsEditorView(model: model, arrangementID: id)
         case .workspace(let id):
             WorkspacesEditorView(model: model, workspaceID: id)
+        case .settings:
+            SettingsEditorView(model: model)
         case .none:
             ContentUnavailableView(
                 "Nothing selected",

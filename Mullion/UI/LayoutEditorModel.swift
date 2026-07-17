@@ -8,6 +8,9 @@ enum EditorSelection: Hashable {
     case binding(UUID)
     case arrangement(UUID)
     case workspace(UUID)
+    /// The app-wide Preferences pane (drag-snap / grid modifiers,
+    /// auto-restore). Singleton — no associated ID.
+    case settings
 }
 
 /// SwiftUI-facing state for the layout editor. Wraps the app's shared
@@ -29,6 +32,7 @@ final class LayoutEditorModel {
     private let arrangementRegistry: ArrangementRegistry
     private let workspaceStore: WorkspaceStore
     private let workspaceController: WorkspaceController
+    private let settingsStore: SettingsStore
     private let onBindingsChanged: (() -> Void)?
 
     /// All layouts as currently persisted (refreshed on save / revert / external reload).
@@ -66,6 +70,31 @@ final class LayoutEditorModel {
     /// to the first screen at render time.
     var previewScreenUUID: String?
 
+    // MARK: Settings (Preferences pane) — write-through to SettingsStore.
+    //
+    // These are stored (not computed) so @Observable tracks reads/writes and
+    // the Preferences pickers re-render on change; `didSet` mirrors each
+    // write into `SettingsStore`, whose JSONStore debounces the disk write.
+    // The overlay controllers read `settingsStore.settings` live per event,
+    // so no restart is needed for a change to take effect.
+
+    /// Modifier that gates drag-to-snap (#25).
+    var dragSnapModifier: ModifierMask {
+        didSet { settingsStore.dragSnapModifier = dragSnapModifier }
+    }
+
+    /// Modifier that reveals the grid overlay (#26).
+    var gridModifier: ModifierMask {
+        didSet { settingsStore.gridModifier = gridModifier }
+    }
+
+    /// Whether window placements are auto-restored on launch / arrangement
+    /// match. Also toggled from the status menu; kept in sync on external
+    /// reload via `refreshFromStores`.
+    var autoRestoreEnabled: Bool {
+        didSet { settingsStore.autoRestoreEnabled = autoRestoreEnabled }
+    }
+
     init(layoutStore: LayoutStore,
          bindingStore: BindingStore,
          appRuleStore: AppRuleStore,
@@ -73,6 +102,7 @@ final class LayoutEditorModel {
          arrangementRegistry: ArrangementRegistry,
          workspaceStore: WorkspaceStore,
          workspaceController: WorkspaceController,
+         settingsStore: SettingsStore,
          onBindingsChanged: (() -> Void)? = nil) {
         self.layoutStore = layoutStore
         self.bindingStore = bindingStore
@@ -81,12 +111,16 @@ final class LayoutEditorModel {
         self.arrangementRegistry = arrangementRegistry
         self.workspaceStore = workspaceStore
         self.workspaceController = workspaceController
+        self.settingsStore = settingsStore
         self.onBindingsChanged = onBindingsChanged
         self.layouts = layoutStore.layouts
         self.appRules = appRuleStore.rules
         self.bindings = bindingStore.bindings
         self.arrangements = arrangementStore.arrangements
         self.workspaces = workspaceStore.workspaces
+        self.dragSnapModifier = settingsStore.dragSnapModifier
+        self.gridModifier = settingsStore.gridModifier
+        self.autoRestoreEnabled = settingsStore.autoRestoreEnabled
         self.screens = DisplayRegistry.shared.screens
         if let first = layoutStore.layouts.first {
             self.selection = .layout(first.id)
@@ -131,7 +165,7 @@ final class LayoutEditorModel {
                 workingCopy = nil
                 selectedZoneID = nil
             }
-        case .appRule, .binding, .arrangement, .workspace, .none:
+        case .appRule, .binding, .arrangement, .workspace, .settings, .none:
             // Switching to a non-layout section preserves any unsaved edits
             // to whichever layout was most recently opened, so the user can
             // bounce back and forth without losing them.
@@ -457,6 +491,20 @@ final class LayoutEditorModel {
         bindings = bindingStore.bindings
         arrangements = arrangementStore.arrangements
         workspaces = workspaceStore.workspaces
+        // settings.json may have changed on disk (FSEvents reload / status-menu
+        // auto-restore toggle) — mirror the fresh values back into the
+        // observed properties so the Preferences pane reflects them. Skip a
+        // write-back when unchanged so didSet doesn't schedule a redundant
+        // disk write.
+        if dragSnapModifier != settingsStore.dragSnapModifier {
+            dragSnapModifier = settingsStore.dragSnapModifier
+        }
+        if gridModifier != settingsStore.gridModifier {
+            gridModifier = settingsStore.gridModifier
+        }
+        if autoRestoreEnabled != settingsStore.autoRestoreEnabled {
+            autoRestoreEnabled = settingsStore.autoRestoreEnabled
+        }
         // arrangements.json may have changed on disk — re-run match against
         // the current display signature so `currentMatch` stays accurate.
         arrangementRegistry.recompute()
@@ -475,7 +523,9 @@ final class LayoutEditorModel {
             if !arrangements.contains(where: { $0.id == id }) { selection = nil }
         case .workspace(let id):
             if !workspaces.contains(where: { $0.id == id }) { selection = nil }
-        case .none:
+        case .settings, .none:
+            // The Preferences pane is a singleton — never invalidated by a
+            // store reload.
             break
         }
     }

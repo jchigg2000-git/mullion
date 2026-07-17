@@ -42,6 +42,24 @@ enum ModifierMask: String, Codable, CaseIterable {
         let pressed = flags.intersection(interesting)
         return pressed == requiredFlags
     }
+
+    /// Human-readable label with modifier glyphs, for Picker rows in the
+    /// editor's Preferences pane. `.none` reads as "disabled" because an
+    /// empty required-flag set means the gesture is always-on, which the
+    /// overlay controllers treat as "no gate" — surfacing that plainly
+    /// avoids the user picking it expecting a no-op.
+    var displayName: String {
+        switch self {
+        case .none: return "None — always active"
+        case .shift: return "⇧ Shift"
+        case .control: return "⌃ Control"
+        case .option: return "⌥ Option"
+        case .command: return "⌘ Command"
+        case .controlOption: return "⌃⌥ Control-Option"
+        case .controlShift: return "⌃⇧ Control-Shift"
+        case .optionShift: return "⌥⇧ Option-Shift"
+        }
+    }
 }
 
 struct AppSettings: Codable {
