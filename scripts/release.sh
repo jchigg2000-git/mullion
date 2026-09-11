@@ -80,7 +80,7 @@ xcodebuild \
   MARKETING_VERSION="$VERSION" \
   CODE_SIGN_STYLE=Manual \
   CODE_SIGN_IDENTITY="$DEVELOPER_ID_APP" \
-  archive | xcpretty || true
+  archive | { command -v xcpretty >/dev/null && xcpretty || cat; }
 
 if [[ ! -d "$ARCHIVE_PATH" ]]; then
   echo "ERROR: archive failed (no $ARCHIVE_PATH)." >&2
@@ -162,7 +162,10 @@ if [[ -z "$SIGN_UPDATE" ]]; then
   exit 1
 fi
 
-SPARKLE_SIG_LINE="$("$SIGN_UPDATE" "$DMG_PATH")"
+# `sign_update` prints both the signature AND a length attribute. The
+# snippet below emits its own length, so keeping Sparkle's would produce
+# duplicate attributes — malformed XML that a feed parser rejects outright.
+SPARKLE_SIG_LINE="$("$SIGN_UPDATE" "$DMG_PATH" | sed -E 's/[[:space:]]*length="[0-9]+"//g')"
 
 # --- appcast snippet ------------------------------------------------------
 
