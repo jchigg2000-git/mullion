@@ -4,6 +4,35 @@ All notable changes to Mullion are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); Mullion uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-09-10
+
+### Fixed
+
+- **Snap-by-index hotkeys (⌃⌥1–⌃⌥0) snapped into the wrong layout, or
+  appeared dead.** When more than one layout matched a display, the
+  governing layout was chosen by declaration order in `layouts.json`.
+  On a display with several matching layouts the hotkeys resolved
+  against whichever was declared first, so they either moved windows
+  into another layout's zones or — when that layout had fewer zones
+  than the index requested — did nothing at all and logged only at
+  debug level, which is indistinguishable from an unbound key.
+- **The arrangement editor's "default layout" picker had no effect.**
+  The chosen layout was persisted and logged on every arrangement
+  match, then discarded. It now decides which layout governs.
+- **Adding a layout for a display could silently do nothing** if an
+  existing layout for that display was declared earlier in the file.
+
+### Changed
+
+- Layout resolution is now one shared code path used by the grid
+  overlay, drag-to-snap, and snap-by-index, so the zones drawn on
+  screen are always the zones a hotkey snaps into. Precedence is: the
+  active arrangement's default layout, then the most specific display
+  predicate (a layout pinned to one display beats one matching any
+  wide display, which beats a catch-all), then declaration order.
+- Requesting a zone index a layout doesn't have now logs at notice
+  level with the layout that answered and its zone count.
+
 ## [1.0.0] - 2026-05-26
 
 First public release. Mullion is a window manager for ultrawide and
