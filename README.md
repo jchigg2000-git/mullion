@@ -9,6 +9,19 @@ wide and ships layouts, zones, and per-app rules that actually use the
 space — asymmetric zones, 6-pane grids, 1/4-1/2-1/4 splits, and
 center-stage-plus-side-rails configurations.
 
+## Install
+
+```bash
+brew install --cask jchigg2000-git/tap/mullion
+```
+
+Homebrew now gates third-party taps, so the first install asks you to trust
+the tap — `brew trust jchigg2000-git/tap` — before it will resolve.
+
+Or download [Mullion-1.0.0.dmg](https://github.com/jchigg2000-git/mullion/releases/latest)
+directly. Builds are signed and notarized with a Developer ID, and update
+themselves via Sparkle. Requires macOS 15 or later.
+
 > **Status:** beta. The core engine (zone snapping, hotkey cycling, per-app
 > rules, learned placements, auto-restore, SwiftUI layout editor) is shipped;
 > [v1.0.0](https://github.com/jchigg2000-git/mullion/releases/tag/v1.0.0) is
