@@ -116,15 +116,16 @@ final class ActionDispatcher {
         }
         let screenUUID = DisplayRegistry.uuid(for: screen)
         let aspect = Double(screen.frame.width / screen.frame.height)
-        guard let layout = layoutStore.layouts.first(where: {
-            $0.displayPredicate.matches(uuid: screenUUID, aspectRatio: aspect)
-        }) else {
+        guard let layout = layoutStore.layout(forScreenUUID: screenUUID, aspectRatio: aspect) else {
             log.debug("snapByIndex aborted: no layout matches current screen (aspect=\(aspect, privacy: .public))")
             return
         }
         let zoneIdx = index1Based - 1
         guard layout.zones.indices.contains(zoneIdx) else {
-            log.debug("snapByIndex: layout '\(layout.name, privacy: .public)' has \(layout.zones.count, privacy: .public) zones, requested \(index1Based, privacy: .public)")
+            // A no-op here looks identical to a dead hotkey. Say which layout
+            // answered and how many zones it has, at notice level, so the next
+            // person does not go hunting for a broken key binding.
+            log.notice("snapByIndex: no zone \(index1Based, privacy: .public) — layout '\(layout.name, privacy: .public)' on '\(screen.localizedName, privacy: .public)' has \(layout.zones.count, privacy: .public) zone(s)")
             return
         }
         snap(window: window, toZoneID: layout.zones[zoneIdx].id)
