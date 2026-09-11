@@ -160,9 +160,7 @@ final class DragOverlayController {
     private func layoutForScreen(_ screen: NSScreen) -> Layout? {
         let uuid = DisplayRegistry.uuid(for: screen)
         let aspect = Double(screen.frame.width / screen.frame.height)
-        return layoutStore.layouts.first {
-            $0.displayPredicate.matches(uuid: uuid, aspectRatio: aspect)
-        }
+        return layoutStore.layout(forScreenUUID: uuid, aspectRatio: aspect)
     }
 
     // MARK: - Overlay lifecycle

@@ -12,6 +12,35 @@ final class LayoutStore {
 
     var layouts: [Layout] { store.value.layouts }
 
+    /// The layout the active display *arrangement* nominates, when it has one.
+    /// `ArrangementRegistry` already surfaces this on every match; before this
+    /// existed the value was logged and then dropped, so a user picking a
+    /// default layout for an arrangement had no effect on snapping.
+    var preferredLayoutID: UUID?
+
+    /// The single place that answers "which layout governs this screen right
+    /// now". Every caller — the grid overlay, drag-to-snap, and snap-by-index —
+    /// must agree, or the overlay shows one set of zones while the hotkeys
+    /// snap into another.
+    ///
+    /// Order: the arrangement's nominated layout, then the most specific
+    /// predicate, then declaration order as a stable final tiebreak.
+    func layout(forScreenUUID uuid: String, aspectRatio: Double) -> Layout? {
+        let candidates = layouts.filter {
+            $0.displayPredicate.matches(uuid: uuid, aspectRatio: aspectRatio)
+        }
+        if let preferredLayoutID,
+           let preferred = candidates.first(where: { $0.id == preferredLayoutID }) {
+            return preferred
+        }
+        return candidates.enumerated().min { a, b in
+            let sa = a.element.displayPredicate.specificity
+            let sb = b.element.displayPredicate.specificity
+            if sa != sb { return sa > sb }
+            return a.offset < b.offset
+        }?.element
+    }
+
     func reload() {
         store.reload()
     }

@@ -55,6 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.layoutStore.layouts.first { $0.id == id }?.name
             } ?? "—"
             self.log.notice("arrangement '\(arrangement.name, privacy: .public)' matched (default layout: \(layoutName, privacy: .public))")
+            self.layoutStore.preferredLayoutID = layoutID
             self.autoRestoreBoundWorkspaces(for: arrangement, trigger: "onMatched")
         }
         arrangementRegistry.onUnknown = { [weak self] signature in
