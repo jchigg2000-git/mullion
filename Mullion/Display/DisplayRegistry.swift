@@ -1,5 +1,6 @@
 import AppKit
 import CoreGraphics
+import os
 
 /// Tracks connected displays with stable identity. `CGDirectDisplayID` is
 /// NOT stable across reconnect, so persistence keys on the UUID from
@@ -63,6 +64,7 @@ final class DisplayRegistry {
                 MainActor.assumeIsolated {
                     guard let self = self else { return }
                     self.screens = NSScreen.screens
+                    Self.log.notice("displays changed: \(Self.describe(self.screens), privacy: .public)")
                     self.observers.removeAll { $0.host == nil }
                     for observer in self.observers where observer.host != nil {
                         observer.callback()
@@ -72,6 +74,17 @@ final class DisplayRegistry {
             debouncer = item
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: item)
         }
+    }
+
+    private static let log = Logger(subsystem: "com.mullion.Mullion", category: "displays")
+
+    /// One line per settled display change — the geometry every overlay and
+    /// snap resolves against afterwards, so post-dock bugs can be matched
+    /// to the frames that were live at the time.
+    private static func describe(_ screens: [NSScreen]) -> String {
+        screens.map { screen in
+            "\(screen.localizedName) frame=\(NSStringFromRect(screen.frame)) visible=\(NSStringFromRect(screen.visibleFrame))"
+        }.joined(separator: "; ")
     }
 
     nonisolated static func uuid(for screen: NSScreen) -> String {

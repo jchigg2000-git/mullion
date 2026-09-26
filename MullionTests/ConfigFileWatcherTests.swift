@@ -42,4 +42,23 @@ final class ConfigFileWatcherTests: XCTestCase {
         wait(for: [expectation], timeout: 1.0)
         XCTAssertEqual(callCount, 1)
     }
+
+    func test_snapHistoryWrites_doNotTriggerReload() {
+        // Regression: every snap writes window-history.json (atomically, via
+        // a temp file + rename), and that write reloaded every store and
+        // re-registered every hotkey ~0.8s after the snap.
+        let dir = "/Users/x/Library/Application Support/Mullion"
+        XCTAssertFalse(ConfigFileWatcher.shouldReload(forChangedPaths: [
+            "\(dir)/.dat.nosync3f1a.Hx2QpL",
+            "\(dir)/window-history.json",
+        ]))
+        XCTAssertFalse(ConfigFileWatcher.shouldReload(forChangedPaths: [
+            "\(dir)/layouts.json.bak-20260910-212805",
+        ]))
+        XCTAssertTrue(ConfigFileWatcher.shouldReload(forChangedPaths: [
+            "\(dir)/.dat.nosync3f1a.Hx2QpL",
+            "\(dir)/layouts.json",
+        ]))
+        XCTAssertTrue(ConfigFileWatcher.shouldReload(forChangedPaths: []))
+    }
 }

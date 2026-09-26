@@ -31,11 +31,7 @@ final class DragOverlayController {
         case dragging(window: AXWindow, hover: Hover?)
     }
 
-    private struct Hover {
-        let zone: Zone
-        let layout: Layout
-        let screen: NSScreen
-    }
+    private typealias Hover = ZoneHitTest.Hit
 
     private var state: State = .idle
 
@@ -143,18 +139,7 @@ final class DragOverlayController {
     /// AX/Quartz cursor point → matching `(zone, layout, screen)` if the
     /// cursor lies inside a zone on the layout for that screen.
     private func resolveHover(axPoint: CGPoint) -> Hover? {
-        guard let appKitPoint = Geometry.axToAppKitPoint(axPoint) else { return nil }
-        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(appKitPoint) }) else {
-            return nil
-        }
-        guard let layout = layoutForScreen(screen) else { return nil }
-        for zone in layout.zones {
-            let zoneFrame = FrameResolver.appKitFrame(for: zone, in: layout, on: screen)
-            if zoneFrame.contains(appKitPoint) {
-                return Hover(zone: zone, layout: layout, screen: screen)
-            }
-        }
-        return nil
+        ZoneHitTest.resolve(axPoint: axPoint, layoutFor: layoutForScreen)
     }
 
     private func layoutForScreen(_ screen: NSScreen) -> Layout? {
@@ -283,6 +268,12 @@ private final class OverlayWindow {
     /// Render the layout's zones in screen-local, top-left-origin
     /// coordinates (matching SwiftUI's native space).
     func render(screen: NSScreen, layout: Layout, highlightID: UUID?, tint: Color) {
+        // Cached per display UUID, but the display's frame can move under
+        // the same UUID (dock/undock, primary change). Re-place every render
+        // so the outlines track where the display is now.
+        if window.frame != screen.frame {
+            window.setFrame(screen.frame, display: false)
+        }
         var rendered: [OverlayContentView.RenderZone] = []
         rendered.reserveCapacity(layout.zones.count)
         for zone in layout.zones {

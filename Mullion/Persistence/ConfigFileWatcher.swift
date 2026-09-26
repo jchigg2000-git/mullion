@@ -10,6 +10,9 @@ import os
 /// Loop safety with `JSONStore`: our own writes fire FSEvents, the callback
 /// triggers a reload, but `JSONStore.reload()` only reads from disk — it
 /// doesn't itself write. The cycle terminates.
+///
+/// Only configuration edits trigger a reload — see
+/// `shouldReload(forChangedPaths:)`.
 final class ConfigFileWatcher {
     private let log = Logger(subsystem: "com.mullion.Mullion", category: "config-watcher")
 
@@ -48,8 +51,13 @@ final class ConfigFileWatcher {
             copyDescription: nil
         )
 
-        let callback: FSEventStreamCallback = { _, info, _, _, _, _ in
+        let callback: FSEventStreamCallback = { _, info, _, eventPaths, _, _ in
             guard let info else { return }
+            // `kFSEventStreamCreateFlagUseCFTypes` below makes `eventPaths`
+            // a CFArray of CFString.
+            let paths = Unmanaged<CFArray>.fromOpaque(eventPaths)
+                .takeUnretainedValue() as? [String] ?? []
+            guard ConfigFileWatcher.shouldReload(forChangedPaths: paths) else { return }
             let box = Unmanaged<WeakBox>.fromOpaque(info).takeUnretainedValue()
             box.watcher?.scheduleFire()
         }
@@ -61,7 +69,9 @@ final class ConfigFileWatcher {
             paths,
             FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
             0.05, // FSEvents-internal coalescing latency (s)
-            UInt32(kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagNoDefer)
+            UInt32(kFSEventStreamCreateFlagFileEvents
+                   | kFSEventStreamCreateFlagNoDefer
+                   | kFSEventStreamCreateFlagUseCFTypes)
         ) else {
             log.error("FSEventStreamCreate failed for \(directory.path, privacy: .public)")
             boxRef.release()
@@ -87,6 +97,26 @@ final class ConfigFileWatcher {
         // briefly afterward; the box's `watcher` weak ref is already nil,
         // so `box.watcher?.scheduleFire()` becomes a no-op.
         boxRef?.release()
+    }
+
+    /// Files in the config directory that Mullion rewrites during normal
+    /// operation as runtime state, not configuration. `window-history.json`
+    /// is written on every snap; treating that as a config edit reloaded
+    /// every store, re-registered every hotkey and re-ran arrangement
+    /// matching ~0.8s after each snap.
+    static let runtimeStateFiles: Set<String> = ["window-history.json"]
+
+    /// Reload only when a `.json` config file changed. Skips runtime state
+    /// and non-JSON names — atomic-write temp files, editor swap files,
+    /// `layouts.json.bak-*` backups. An atomic write of a config file still
+    /// reports the final `<name>.json` path on its rename, so real edits
+    /// always get through. No paths at all → reload, the safe default.
+    static func shouldReload(forChangedPaths paths: [String]) -> Bool {
+        guard !paths.isEmpty else { return true }
+        return paths.contains { path in
+            let name = (path as NSString).lastPathComponent
+            return name.hasSuffix(".json") && !runtimeStateFiles.contains(name)
+        }
     }
 
     /// Internal hook — also lets tests drive the debounce without producing
