@@ -23,62 +23,62 @@ gates anything
 
 ## §0 Do next
 
-> ### ▶ RESUME HERE — session handoff 2026-08-07 (doc-consolidation sweep)
+> ### ▶ RESUME HERE — 2026-09-26: display-change fixes PARKED on a branch (not merged, not released)
 >
-> **State:** `main`, HEAD `a59ba2f` ("docs: refresh README"), tree clean before this sweep ran.
-> No feature work happened this session — this was a documentation-consolidation pass only
-> (`~/.claude/skills/doc-consolidation`). Current app version is 1.0.0 (`project.yml:53`,
-> matches the only git tag `v1.0.0`).
+> **State:** branch `fix/display-change-resilience` (3 commits on `main` @ `f90b1c2`, v1.0.1),
+> not pushed, not merged. Owner parked it mid-verification — windows being rearranged during
+> testing was interfering with other work. **Nothing here is a blocker for anything else.**
 >
-> **▶ NEXT ACTION: pick any item from §1 (cheapest) or §2/§3 (real user-facing polish).**
+> **▶ NEXT ACTION:** finish the owner-run live check (undock → redock with the dev build, one ⌃⌥
+> grid click + one ⌃-drag per display after each), then merge and cut 1.0.2 via
+> `docs/release.md`. Optionally run one more opus review round first (round 2 was stopped
+> before it reported).
 >
-> #### What shipped
-> - This sweep: `ROADMAP.md` + `DECISIONS.md` + a `CLAUDE.md` SSOT paragraph, installed by hand
->   (repo had no pre-existing roadmap doc). `docs/handoff.md` and `CHOICES.md` folded in and
->   staged to purgatory (30-day review window) — no code changed.
+> #### On the branch
+> - `0d3bea4` docs(release): Homebrew cask bump step (from another session; owner OK'd shipping it).
+> - `8af76a9` the fixes: re-arm the mouse event tap on `tapDisabledByTimeout/ByUserInput` and
+>   re-check it on display change + display wake; grid clicks resolved from the tap against
+>   live geometry (`Overlay/ZoneHitTest.swift`, shared with drag-to-snap) instead of cached
+>   panels with a stale `owningScreen`; overlays re-framed on every render; process-wide 1 s
+>   AX messaging timeout; `ConfigFileWatcher` no longer reloads on `window-history.json` writes;
+>   `WindowMutator` keeps EUI off through the aggressive retry; `.notice` logs for display
+>   changes, mutator retries, tap re-arms and every grid no-snap path.
+> - `5f0b3db` opus review round 1: grid clicks pick the zone drawn on top (my first cut picked
+>   the first match — a full-screen zone listed first swallowed every quadrant click);
+>   watcher reloads on FSEvents rescan/dropped/dir-level notices; an unmodified click dismisses
+>   a grid left stuck by a lost ⌃⌥ release. 86 tests green.
 >
-> #### What I found by reading that nobody reported
-> - **`docs/design/v1.md`'s "Build order" section is stale.** It frames Phases A–F (items
->   15–28: `.focus` role, `outerMargin`/`innerGap`, App Rules + Bindings editor UI, FSEvents
->   auto-reload, arrangement detection + default-layout apply, mouse tap, drag/grid overlays,
->   workspaces capture/restore/arrangement-binding) as "the remaining v1 work." **All of it is
->   shipped** — verified by reading source (`FocusIndex.swift`, `ActionDispatcher.swift:75`,
->   `FrameResolver.swift`, `AppRulesEditorView.swift`, `BindingsEditorView.swift`,
->   `ConfigFileWatcher.swift`, `ArrangementRegistry.swift`, `MouseEventTap.swift`,
->   `Drag/GridOverlayController.swift`, `WorkspaceController.swift`) and cross-checked against
->   `git log --oneline` (commits `5efbe76`, `9682b52`, `7736371`, `7ef78e9`, `7d27eed` etc. are
->   literally titled `feat: Phase E/F #NN — ...`). Only **Phase G item #29
->   (`SystemWindowManager` fallback)** is genuinely unbuilt — `CompatProfile.swift:16` says so
->   explicitly in a code comment ("Treated as `.standard` by the mutator until Phase G ships"),
->   and it's declared hold-for-demand, not scheduled.
-> - **`HotkeyBinding.swift:16`'s comment `// v1: stub` on `case focus` is itself stale.**
->   `ActionDispatcher.swift:75` dispatches `.focus` for real, through `FocusIndex`'s MRU list.
->   Left the comment alone — a code-comment fix is outside a doc-consolidation sweep's scope, but
->   flagging it here so it doesn't get taken at face value.
-> - **`docs/handoff.md`'s P1 item "Settings UI for `dragSnapModifier`/`gridModifier` — still
->   hand-edit `settings.json`" is stale.** Commit `e423244` ("feat: Preferences pane for
->   drag-snap & grid overlay modifiers") shipped it *after* the handoff doc was written, and the
->   current README already documents the Preferences pane. Carried forward here as ✅, not ⬜.
-> - **`docs/handoff.md`'s claim `WorkspaceController.recapture is non-atomic` cites a method that
->   no longer exists under that name** — current `WorkspaceController.swift` has
->   `captureCurrent(name:)` (line 33), not `recapture`. Unclear whether the atomicity concern
->   still applies post-rename; carried forward as 🔬 OWED rather than dropped or asserted true.
+> #### Evidence (unified log, 2026-09-26)
+> - "Close and reopen after docking": after the 13:00 dock event the grid never revealed again
+>   until relaunch — tap disabled, never re-armed. **Reproduced live on the dev build at
+>   16:50:52**: a slow-to-answer app stalled a snap, macOS logged the tap disabled by timeout,
+>   the new handler re-enabled it and the next snap worked.
+> - Two other relaunches (no display change) had "grid revealed" with no snap and no log line:
+>   clicks went through cached panels' own hit-testing. Now tap-driven and logged.
+> - Every snap triggered a full `reloadAll` ~0.8 s later via the `window-history.json` write.
 >
-> #### What I deliberately did NOT do, and why
-> - Did not edit `docs/design/v1.md`'s Build-order section or the stale code comments above —
->   doc-consolidation's contract is fold-and-stage, not content rewrites of docs that stay in
->   place. Corrected status is tracked here in §4 instead; `docs/design/v1.md` still reads as
->   originally written (its architecture/schema sections are accurate and it's actively
->   referenced from `README.md`, so it stays put, un-edited).
-> - Did not touch `docs/release.md` or `docs/appcast.xml` — live Sparkle/notarization deploy
->   contracts, not plans (per this sweep's explicit Mullion carve-out).
-> - Did not verify the `ModifierMask` "partial chord coverage" or "iTerm off-by-1px" claims
->   against current source beyond a light grep — carried forward from `docs/handoff.md`
->   unchanged; see §3.
+> #### Still open
+> - 🔬 **TWITCH-1** "screen twitching / pixels drifting off-screen or into the Dock after a dock
+>   change; shrinking windows usually stops it." **Not reproduced.** One docking run with a
+>   10 Hz CGWindowList probe found only macOS Mission Control / Spaces animations (all windows
+>   in lockstep) and no Mullion frame writes. Code review refuted a frame-write feedback loop
+>   (Mullion has no AXObserver) and a stale coordinate pivot. The EUI-retry double jump is fixed.
+>   Next time it happens: note the time, then read `log show --predicate 'subsystem ==
+>   "com.mullion.Mullion"'` around it (`displays` / `mutator` categories) — Mullion's
+>   `.notice` lines only survive a few hours in the unified log.
+> - ⬜ Not fixed (judged real but deferred by the review): grid hit-test is geometry-only, so a
+>   click on a fully transparent panel pixel could still snap — marginal; tap re-arm doesn't
+>   resync modifier state (`CGEventSource.flagsState`), so a stuck grid stays painted until the
+>   next click.
+> - Setup note, not a bug: the saved "3 displays" arrangement doesn't match when the 2560×720
+>   display is off, so the 2-display dock gets no default layout / workspace auto-restore. The
+>   menu offers "Save current displays as arrangement…".
+> - The new diagnostic `.notice` lines deliberately run against CLEAN-4 below — keep them until
+>   TWITCH-1 is closed.
 >
-> #### Questions
-> - None blocking. One verification owed (`captureCurrent` atomicity, see §3).
-
+> #### Carried from the 2026-08-07 handoff
+> - `docs/design/v1.md` "Build order" is stale (Phases A–F all shipped); only Phase G #29 unbuilt.
+> - `HotkeyBinding.swift:16` comment `// v1: stub` on `case focus` is stale.
 ---
 
 ## §1 Post-v1 cleanup queue
@@ -86,7 +86,7 @@ gates anything
 Folded from `docs/handoff.md` § "Post-v1 cleanup queue." All still open — none had a fixing
 commit in `git log`.
 
-- ⬜ **CLEAN-1** `scripts/release.sh` emits a duplicated `length` attribute in the appcast
+- ✅ **CLEAN-1** (**DONE `f90b1c2`** — Sparkle's copy is stripped, template's kept) `scripts/release.sh` emits a duplicated `length` attribute in the appcast
   snippet — `scripts/release.sh:191` hardcodes `length="$SIZE_BYTES"`, then line 193 pastes
   `$SPARKLE_SIG_LINE` which already contains its own `length="..."`. Confirmed still present at
   both line numbers. One-line fix: drop the script's own `length=` line.
@@ -131,10 +131,9 @@ Folded from `docs/handoff.md` § "Deferred / open — P1," cross-checked against
 
 Folded from `docs/handoff.md` § "Deferred / open — P2."
 
-- ⬜ **DEFER-1** Arrangement match doesn't behaviorally apply `defaultLayoutID` — verified still
-  true by reading `AppDelegate.swift:52-58`: `arrangementRegistry.onMatched` logs the matched
-  arrangement's default layout name and calls `autoRestoreBoundWorkspaces`, but never applies
-  the layout itself. Only the workspace-binding path acts on a match today.
+- ✅ **DEFER-1** Arrangement match doesn't behaviorally apply `defaultLayoutID` — **DONE in 1.0.1
+  (`e5b56d9`)**: `onMatched` now sets `layoutStore.preferredLayoutID`, which governs layout
+  resolution (see `CHANGELOG.md` 1.0.1).
 - 🔬 **OWED — does the "non-atomic" concern on workspace capture still apply?** `docs/handoff.md`
   named `WorkspaceController.recapture` as non-atomic; that method doesn't exist under that name
   anymore — current code has `captureCurrent(name:)` (`WorkspaceController.swift:33`). Unclear
