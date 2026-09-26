@@ -34,4 +34,36 @@ final class ZoneHitTestTests: XCTestCase {
             1
         )
     }
+
+    func test_overlappingZones_gridClickResolvesToZoneDrawnOnTop() {
+        // Regression: the grid paints zones in array order, so the last zone
+        // containing a point is the one on top. Resolving grid clicks by
+        // first match made a full-screen zone listed before quadrants (the
+        // user's "Standard 4-Pane") swallow every click, so the quadrants
+        // could no longer be reached.
+        let fourPane = Layout(
+            name: "Standard 4-Pane",
+            zones: [
+                Zone(name: "Full", x: 0, y: 0, width: 1, height: 1),
+                Zone(name: "BR", x: 0.5, y: 0.5, width: 0.5, height: 0.5),
+                Zone(name: "BL", x: 0, y: 0.5, width: 0.5, height: 0.5),
+                Zone(name: "TL", x: 0, y: 0, width: 0.5, height: 0.5),
+                Zone(name: "TR", x: 0.5, y: 0, width: 0.5, height: 0.5),
+            ]
+        )
+        let visible = CGRect(x: 0, y: 0, width: 1000, height: 800)
+        // AppKit y grows upward: the top-left quadrant is y 400...800.
+        let clickInTopLeft = CGPoint(x: 250, y: 600)
+
+        XCTAssertEqual(
+            ZoneHitTest.zoneIndex(at: clickInTopLeft, in: fourPane,
+                                  visibleFrame: visible, preferTopmost: true),
+            3
+        )
+        // Drag-to-snap keeps its first-match hover rule.
+        XCTAssertEqual(
+            ZoneHitTest.zoneIndex(at: clickInTopLeft, in: fourPane, visibleFrame: visible),
+            0
+        )
+    }
 }

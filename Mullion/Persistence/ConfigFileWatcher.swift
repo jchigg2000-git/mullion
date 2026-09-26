@@ -12,7 +12,7 @@ import os
 /// doesn't itself write. The cycle terminates.
 ///
 /// Only configuration edits trigger a reload — see
-/// `shouldReload(forChangedPaths:)`.
+/// `shouldReload(forChangedPaths:flags:watchedDirectory:)`.
 final class ConfigFileWatcher {
     private let log = Logger(subsystem: "com.mullion.Mullion", category: "config-watcher")
 
@@ -29,7 +29,8 @@ final class ConfigFileWatcher {
     /// fires after the watcher itself has been freed.
     private final class WeakBox {
         weak var watcher: ConfigFileWatcher?
-        init(_ watcher: ConfigFileWatcher? = nil) { self.watcher = watcher }
+        let directoryPath: String
+        init(directoryPath: String) { self.directoryPath = directoryPath }
     }
 
     init?(directory: URL,
@@ -37,7 +38,7 @@ final class ConfigFileWatcher {
           onChange: @escaping () -> Void) {
         self.onChange = onChange
         self.debounceInterval = debounceInterval
-        self.weakBox = WeakBox()
+        self.weakBox = WeakBox(directoryPath: directory.path)
 
         let boxRef = Unmanaged.passRetained(weakBox)
         self.boxRef = boxRef
@@ -51,14 +52,18 @@ final class ConfigFileWatcher {
             copyDescription: nil
         )
 
-        let callback: FSEventStreamCallback = { _, info, _, eventPaths, _, _ in
+        let callback: FSEventStreamCallback = { _, info, numEvents, eventPaths, eventFlags, _ in
             guard let info else { return }
+            let box = Unmanaged<WeakBox>.fromOpaque(info).takeUnretainedValue()
             // `kFSEventStreamCreateFlagUseCFTypes` below makes `eventPaths`
             // a CFArray of CFString.
             let paths = Unmanaged<CFArray>.fromOpaque(eventPaths)
                 .takeUnretainedValue() as? [String] ?? []
-            guard ConfigFileWatcher.shouldReload(forChangedPaths: paths) else { return }
-            let box = Unmanaged<WeakBox>.fromOpaque(info).takeUnretainedValue()
+            let flags = Array(UnsafeBufferPointer(start: eventFlags, count: numEvents))
+            guard ConfigFileWatcher.shouldReload(forChangedPaths: paths,
+                                                 flags: flags,
+                                                 watchedDirectory: box.directoryPath)
+            else { return }
             box.watcher?.scheduleFire()
         }
 
@@ -106,13 +111,37 @@ final class ConfigFileWatcher {
     /// matching ~0.8s after each snap.
     static let runtimeStateFiles: Set<String> = ["window-history.json"]
 
+    /// FSEvents flags meaning "events were lost or coalesced — rescan".
+    /// Such an event carries the watched directory's path, not the file
+    /// that changed, so the name filter below can't see the edit it hides.
+    static let rescanFlags = FSEventStreamEventFlags(
+        kFSEventStreamEventFlagMustScanSubDirs
+        | kFSEventStreamEventFlagUserDropped
+        | kFSEventStreamEventFlagKernelDropped
+        | kFSEventStreamEventFlagRootChanged
+    )
+
     /// Reload only when a `.json` config file changed. Skips runtime state
     /// and non-JSON names — atomic-write temp files, editor swap files,
     /// `layouts.json.bak-*` backups. An atomic write of a config file still
     /// reports the final `<name>.json` path on its rename, so real edits
-    /// always get through. No paths at all → reload, the safe default.
-    static func shouldReload(forChangedPaths paths: [String]) -> Bool {
+    /// always get through. Always reloads on a rescan notice (dropped
+    /// events) or an event on the watched directory itself or an ancestor
+    /// (config dir swapped into place by a restore) — neither names the
+    /// files inside. No paths at all → reload, the safe default.
+    static func shouldReload(forChangedPaths paths: [String],
+                             flags: [FSEventStreamEventFlags] = [],
+                             watchedDirectory: String? = nil) -> Bool {
         guard !paths.isEmpty else { return true }
+        if flags.contains(where: { $0 & rescanFlags != 0 }) { return true }
+        if let watchedDirectory {
+            let watched = (watchedDirectory as NSString).standardizingPath
+            let touchesWatchedDir = paths.contains { path in
+                let standardized = (path as NSString).standardizingPath
+                return standardized == watched || watched.hasPrefix(standardized + "/")
+            }
+            if touchesWatchedDir { return true }
+        }
         return paths.contains { path in
             let name = (path as NSString).lastPathComponent
             return name.hasSuffix(".json") && !runtimeStateFiles.contains(name)

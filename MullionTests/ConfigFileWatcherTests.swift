@@ -1,3 +1,4 @@
+import CoreServices
 import XCTest
 @testable import Mullion
 
@@ -60,5 +61,34 @@ final class ConfigFileWatcherTests: XCTestCase {
             "\(dir)/layouts.json",
         ]))
         XCTAssertTrue(ConfigFileWatcher.shouldReload(forChangedPaths: []))
+    }
+
+    func test_rescanNoticeOrDirectoryEvent_triggersReload() {
+        // Regression: the name filter ignored events carrying only the
+        // watched directory's path, so a config edit hidden in an FSEvents
+        // drop (MustScanSubDirs|UserDropped) or a config dir swapped into
+        // place by a restore was never applied.
+        let dir = "/Users/x/Library/Application Support/Mullion"
+        let dropped = FSEventStreamEventFlags(
+            kFSEventStreamEventFlagMustScanSubDirs | kFSEventStreamEventFlagUserDropped
+        )
+        XCTAssertTrue(ConfigFileWatcher.shouldReload(
+            forChangedPaths: [dir], flags: [dropped], watchedDirectory: dir
+        ))
+        let renamedDir = FSEventStreamEventFlags(
+            kFSEventStreamEventFlagItemIsDir | kFSEventStreamEventFlagItemRenamed
+        )
+        XCTAssertTrue(ConfigFileWatcher.shouldReload(
+            forChangedPaths: [dir], flags: [renamedDir], watchedDirectory: dir
+        ))
+        // A snap's history write still doesn't reload.
+        let fileRenamed = FSEventStreamEventFlags(
+            kFSEventStreamEventFlagItemIsFile | kFSEventStreamEventFlagItemRenamed
+        )
+        XCTAssertFalse(ConfigFileWatcher.shouldReload(
+            forChangedPaths: ["\(dir)/window-history.json"],
+            flags: [fileRenamed],
+            watchedDirectory: dir
+        ))
     }
 }

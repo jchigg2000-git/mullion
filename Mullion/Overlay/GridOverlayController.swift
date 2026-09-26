@@ -78,7 +78,18 @@ final class GridOverlayController {
     /// is distinguishable in the log from a click that never arrived.
     func handleMouseDown(at axPoint: CGPoint, flags: CGEventFlags) {
         guard case .visible(let focused) = state else { return }
-        guard let hit = ZoneHitTest.resolve(axPoint: axPoint, layoutFor: layoutForScreen) else {
+        // A modifier release lost while the tap was disabled (main-thread
+        // stall past the tap timeout) leaves the grid armed; an unmodified
+        // click must dismiss it, not snap the window captured at reveal.
+        guard settingsStore.settings.gridModifier.isSatisfied(by: flags) else {
+            state = .idle
+            hideOverlays()
+            log.notice("grid click without grid modifier — grid dismissed, no snap")
+            return
+        }
+        guard let hit = ZoneHitTest.resolve(axPoint: axPoint,
+                                            preferTopmost: true,
+                                            layoutFor: layoutForScreen) else {
             log.notice("grid click outside any zone @ (\(Int(axPoint.x), privacy: .public), \(Int(axPoint.y), privacy: .public)) — no snap")
             return
         }
