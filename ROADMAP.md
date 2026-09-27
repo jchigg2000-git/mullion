@@ -66,6 +66,18 @@ gates anything
 >   Next time it happens: note the time, then read `log show --predicate 'subsystem ==
 >   "com.mullion.Mullion"'` around it (`displays` / `mutator` categories) — Mullion's
 >   `.notice` lines only survive a few hours in the unified log.
+>   **Evening 2026-09-26, three live captures while the owner reproduced it** (window bounds at
+>   10–20 Hz incl. Dock layers + cursor, frontmost-app changes, Dock `com.apple.dock.spaces`):
+>   Mullion logged nothing and wrote no frames in any of them. Every desktop flip coincided
+>   with an app activation; two were explicit — Dock: "switching to space N for window …
+>   ordered on non-visible space" for **Messages** (20:55:07) and **Claude** (20:51:28,
+>   20:55:29) — i.e. macOS "When switching to an application, switch to a Space with open
+>   windows" (on by default here). The Dock bar window (L20, full LG frame) never moved;
+>   Dock magnification is on (49 → 84 pt), which redraws inside that window and is invisible
+>   to CGWindowList. Untested lead matching the owner's "position of a window" hunch: zones
+>   end flush at `visibleFrame` bottom, so a click near a lower zone's bottom edge grazes the
+>   magnification zone. Cheapest A/B next time: quit Mullion and repeat; then try with that
+>   Spaces setting off and/or magnification off (or a `outerMargin.bottom` on lower zones).
 > - ⬜ Not fixed (judged real but deferred by the review): grid hit-test is geometry-only, so a
 >   click on a fully transparent panel pixel could still snap — marginal; tap re-arm doesn't
 >   resync modifier state (`CGEventSource.flagsState`), so a stuck grid stays painted until the
