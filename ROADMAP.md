@@ -91,7 +91,6 @@ gates anything
 >
 > #### Carried from the 2026-08-07 handoff
 > - `docs/design/v1.md` "Build order" is stale (Phases A–F all shipped); only Phase G #29 unbuilt.
-> - `HotkeyBinding.swift:16` comment `// v1: stub` on `case focus` is stale.
 ---
 
 ## §1 Post-v1 cleanup queue
@@ -103,9 +102,6 @@ commit in `git log`.
   snippet — `scripts/release.sh:191` hardcodes `length="$SIZE_BYTES"`, then line 193 pastes
   `$SPARKLE_SIG_LINE` which already contains its own `length="..."`. Confirmed still present at
   both line numbers. One-line fix: drop the script's own `length=` line.
-- ⬜ **CLEAN-2** `scripts/release.sh:83` pipes through `xcpretty`, which isn't installed —
-  confirmed still present (`archive | xcpretty || true`). Non-fatal (falls through to raw
-  output). `brew install xcpretty` or remove the pipe.
 - ⬜ **CLEAN-3** Only the DMG is stapled, not the `.app` inside it — confirmed:
   `scripts/release.sh:146-147` staples/validates `$DMG_PATH` only. Gatekeeper does an online
   notarization check on first launch after copy-from-DMG; works, but isn't offline-safe.
@@ -131,9 +127,6 @@ Folded from `docs/handoff.md` § "Deferred / open — P1," cross-checked against
 - ⬜ **LIMIT-3** iTerm sidebar off-by-1px (`dx=-1`) — masked by the `< 2` idempotence tolerance
   in `WorkspaceController.framesEqualWithinTolerance`, but the rounding source lives in
   `FrameResolver`/`Geometry`. Not independently re-verified this pass; carried forward.
-- ⬜ **LIMIT-4** Wallpaper tint for the grid overlay doesn't refresh on wallpaper/Space change —
-  sampled once per display on first overlay show, cached for the app's lifetime. Confirmed
-  still true in `CHANGELOG.md`'s 1.0.0 known-limitations list; no fix commit since.
 - ~~⬜ **LIMIT-5 — Settings UI for `dragSnapModifier`/`gridModifier` still hand-edited via
   `settings.json`.**~~ **DONE `e423244`** — "feat: Preferences pane for drag-snap & grid overlay
   modifiers," shipped after `docs/handoff.md` was written; README already documents it. Original
@@ -173,8 +166,8 @@ shipped/open status, verified against source and `git log` this pass:
 - ✅ **Phase 0** (steps 1–14, the original v1 core) — shipped, per `docs/design/v1.md` and
   confirmed by `CHANGELOG.md` 1.0.0.
 - ✅ **Phase A** (steps 15–16: `.focus` role, `outerMargin`/`innerGap`) — shipped. `.focus`
-  dispatches via `FocusIndex` (`ActionDispatcher.swift:75`) despite a stale "v1: stub" comment
-  on the enum case; `outerMargin`/`innerGap` implemented in `FrameResolver.swift` and exposed in
+  dispatches via `FocusIndex` (`ActionDispatcher.swift:75`);
+  `outerMargin`/`innerGap` implemented in `FrameResolver.swift` and exposed in
   `LayoutEditorView.swift:375-387`.
 - ✅ **Phase B** (step 17: Sparkle + notarization) — shipped, v1.0.0 released 2026-05-26.
 - ✅ **Phase C** (steps 18–21: App Rules editor UI, Bindings editor UI, FSEvents auto-reload,
