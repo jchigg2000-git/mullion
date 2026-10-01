@@ -32,6 +32,11 @@ All notable changes to Mullion are documented here. Format follows
   `<name>.json.unreadable-<timestamp>` before saving.
 - **An edit made just before quitting could be lost.** Changes are saved
   half a second after the last edit, and nothing saved them on quit.
+- **Capturing a workspace could file a window under the wrong layout's
+  zone.** When several layouts matched a display, the capture used the
+  first one in file order, so restoring moved the window into that
+  layout's zone instead of the one you snapped it to. It now tries the
+  layout that governs the display first.
 - **The overlay accent kept the first wallpaper's tint all session.**
   It now recomputes when a display's wallpaper changes.
 

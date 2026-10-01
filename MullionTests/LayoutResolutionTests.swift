@@ -144,6 +144,25 @@ final class LayoutResolutionTests: XCTestCase {
         XCTAssertEqual(s.layout(forScreenUUID: xeneon, aspectRatio: wideAspect)?.name, "Centre stage")
     }
 
+    func test_rankedLayouts_putsGoverningFirstThenSpecificityThenDeclarationOrder() {
+        let catchAll = layout("Catch-all", .anyDisplay, zones: 2)
+        let wide = layout("Wide", .aspectRatioAtLeast(min: 2.3), zones: 3)
+        let exact = layout("Exact", .specificDisplay(uuid: xeneon), zones: 4)
+        let wideTwin = layout("Wide twin", .aspectRatioAtLeast(min: 2.3), zones: 5)
+        let elsewhere = layout("Elsewhere", .specificDisplay(uuid: "OTHER"), zones: 1)
+        let s = store([catchAll, wide, exact, wideTwin, elsewhere])
+
+        func names() -> [String] {
+            s.rankedLayouts(forScreenUUID: xeneon, aspectRatio: wideAspect).map(\.name)
+        }
+        XCTAssertEqual(names(), ["Exact", "Wide", "Wide twin", "Catch-all"])
+        XCTAssertEqual(s.layout(forScreenUUID: xeneon, aspectRatio: wideAspect)?.name, "Exact")
+
+        s.preferredLayoutProvider = { wideTwin.id }
+        XCTAssertEqual(names(), ["Wide twin", "Exact", "Wide", "Catch-all"])
+        XCTAssertEqual(s.layout(forScreenUUID: xeneon, aspectRatio: wideAspect)?.name, "Wide twin")
+    }
+
     func test_tieBrokenByDeclarationOrder() {
         let first = layout("First", .specificDisplay(uuid: xeneon), zones: 4)
         let second = layout("Second", .specificDisplay(uuid: xeneon), zones: 2)

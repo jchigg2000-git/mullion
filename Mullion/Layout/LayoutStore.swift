@@ -38,19 +38,30 @@ final class LayoutStore {
     /// Order: the arrangement's nominated layout, then the most specific
     /// predicate, then declaration order as a stable final tiebreak.
     func layout(forScreenUUID uuid: String, aspectRatio: Double) -> Layout? {
-        let candidates = layouts.filter {
-            $0.displayPredicate.matches(uuid: uuid, aspectRatio: aspectRatio)
-        }
+        rankedLayouts(forScreenUUID: uuid, aspectRatio: aspectRatio).first
+    }
+
+    /// Every layout whose predicate matches the screen, best first: the
+    /// governing layout, then the rest by specificity and declaration order.
+    /// For callers that must consider more than the governing layout (a
+    /// workspace capture looks for the zone a window already sits in, which
+    /// may belong to a layout that isn't the governing one) but still need to
+    /// try the governing layout first.
+    func rankedLayouts(forScreenUUID uuid: String, aspectRatio: Double) -> [Layout] {
+        var ranked = layouts.enumerated()
+            .filter { $0.element.displayPredicate.matches(uuid: uuid, aspectRatio: aspectRatio) }
+            .sorted { a, b in
+                let sa = a.element.displayPredicate.specificity
+                let sb = b.element.displayPredicate.specificity
+                if sa != sb { return sa > sb }
+                return a.offset < b.offset
+            }
+            .map(\.element)
         if let preferredLayoutID,
-           let preferred = candidates.first(where: { $0.id == preferredLayoutID }) {
-            return preferred
+           let index = ranked.firstIndex(where: { $0.id == preferredLayoutID }) {
+            ranked.insert(ranked.remove(at: index), at: 0)
         }
-        return candidates.enumerated().min { a, b in
-            let sa = a.element.displayPredicate.specificity
-            let sb = b.element.displayPredicate.specificity
-            if sa != sb { return sa > sb }
-            return a.offset < b.offset
-        }?.element
+        return ranked
     }
 
     func reload() {
