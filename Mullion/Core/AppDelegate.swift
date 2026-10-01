@@ -26,13 +26,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         layoutStore: layoutStore,
         settingsStore: settingsStore,
         appRuleStore: appRuleStore,
-        historyStore: historyStore
+        historyStore: historyStore,
+        focusIndex: focusIndex
     )
     private lazy var gridOverlayController = GridOverlayController(
         layoutStore: layoutStore,
         settingsStore: settingsStore,
         appRuleStore: appRuleStore,
-        historyStore: historyStore
+        historyStore: historyStore,
+        focusIndex: focusIndex
     )
 
     private var statusItemController: StatusItemController?

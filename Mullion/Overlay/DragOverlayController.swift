@@ -23,7 +23,7 @@ final class DragOverlayController {
     private let layoutStore: LayoutStore
     private let settingsStore: SettingsStore
     private let appRuleStore: AppRuleStore
-    private let historyStore: WindowHistoryStore
+    private let recorder: SnapRecorder
     private let mover: any WindowMover
 
     private enum State {
@@ -54,11 +54,12 @@ final class DragOverlayController {
          settingsStore: SettingsStore,
          appRuleStore: AppRuleStore,
          historyStore: WindowHistoryStore,
+         focusIndex: FocusIndex? = nil,
          mover: any WindowMover = ChainedWindowMover.default) {
         self.layoutStore = layoutStore
         self.settingsStore = settingsStore
         self.appRuleStore = appRuleStore
-        self.historyStore = historyStore
+        self.recorder = SnapRecorder(history: historyStore, focusIndex: focusIndex)
         self.mover = mover
     }
 
@@ -211,13 +212,12 @@ final class DragOverlayController {
         if !landed {
             log.notice("drag-snap did not land near target zone=\(hover.zone.name, privacy: .public)")
         }
-        if let bundleID {
-            historyStore.record(
-                bundleID: bundleID,
-                displayUUID: DisplayRegistry.uuid(for: hover.screen),
-                zoneID: hover.zone.id
-            )
-        }
+        recorder.record(
+            window: window,
+            bundleID: bundleID,
+            screenUUID: DisplayRegistry.uuid(for: hover.screen),
+            zoneID: hover.zone.id
+        )
         log.notice("drag-snap → '\(hover.zone.name, privacy: .public)' on '\(hover.screen.localizedName, privacy: .public)'")
     }
 }
