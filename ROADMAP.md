@@ -86,6 +86,13 @@ gates anything
 >   ⌃⌥ release lost while the tap was off hides the grid instead of leaving it painted until the
 >   next click. Landed on `main` 2026-10-01 (90 tests green); like the rest of the display-change
 >   work, not live-verified.
+> - ✅ Landed on `main` 2026-10-01 (105 tests green; none live-verified): the matched
+>   arrangement's default layout is now read live from `ArrangementRegistry.currentMatch`
+>   (it was never applied at launch, ignored on edit, and kept after leaving the arrangement) —
+>   so the redock check should also confirm ⌃⌥ grid / ⌃⌥N use the arrangement's default layout;
+>   `JSONStore` copies an unreadable config aside as `<name>.json.unreadable-<ts>` before
+>   overwriting it and flushes pending writes on quit; workspace capture tries the governing
+>   layout first; drag and grid snaps feed the per-zone `.focus` list (`SnapRecorder`).
 > - Setup note, not a bug: the saved "3 displays" arrangement doesn't match when the 2560×720
 >   display is off, so the 2-display dock gets no default layout / workspace auto-restore. The
 >   menu offers "Save current displays as arrangement…".
