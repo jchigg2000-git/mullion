@@ -37,6 +37,9 @@ All notable changes to Mullion are documented here. Format follows
   first one in file order, so restoring moved the window into that
   layout's zone instead of the one you snapped it to. It now tries the
   layout that governs the display first.
+- **A zone's focus hotkey couldn't find windows you'd placed with the
+  mouse.** Drag-to-snap and grid clicks recorded the placement but not the
+  per-zone focus list, which only hotkey and menu snaps fed.
 - **The overlay accent kept the first wallpaper's tint all session.**
   It now recomputes when a display's wallpaper changes.
 

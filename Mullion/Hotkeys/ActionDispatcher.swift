@@ -181,14 +181,12 @@ final class ActionDispatcher {
         if !landed {
             log.debug("snap did not land near target for pid=\(window.pid, privacy: .public) zone=\(zone.name, privacy: .public) profile=\(profile.rawValue, privacy: .public)")
         }
-        if let bundleID = window.bundleIdentifier {
-            history?.record(
-                bundleID: bundleID,
-                displayUUID: DisplayRegistry.uuid(for: screen),
-                zoneID: zone.id
-            )
-        }
-        focusIndex.record(window: window, zoneID: zone.id)
+        SnapRecorder(history: history, focusIndex: focusIndex).record(
+            window: window,
+            bundleID: window.bundleIdentifier,
+            screenUUID: DisplayRegistry.uuid(for: screen),
+            zoneID: zone.id
+        )
     }
 
     // MARK: Focus
