@@ -128,6 +128,22 @@ Output: `release-build/Mullion-<VERSION>.dmg`.
    matches `v<VERSION>`).
 4. Commit the appcast update and push (or wait for the Pages deploy if
    you configured Pages).
+5. Bump the Homebrew cask in
+   [`jchigg2000-git/homebrew-tap`](https://github.com/jchigg2000-git/homebrew-tap).
+   Brew never picks up a release on its own (`livecheck` only reports
+   that one exists), so until this step `brew install --cask
+   jchigg2000-git/tap/mullion` keeps serving the previous version. In
+   `Casks/mullion.rb`, set `version` to `<VERSION>` and `sha256` to:
+
+   ```sh
+   shasum -a 256 release-build/Mullion-<VERSION>.dmg
+   ```
+
+   Commit and push the tap, then confirm the URL and checksum resolve:
+
+   ```sh
+   brew update && brew fetch --cask jchigg2000-git/tap/mullion
+   ```
 
 Installed Mullions will detect the new version on their next update
 check (default cadence is daily; manual via menu bar → Check for

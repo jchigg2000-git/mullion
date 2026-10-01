@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import os
 
 @MainActor
@@ -40,10 +41,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var onboardingWindow: OnboardingWindow?
     private var layoutEditorWindow: LayoutEditorWindow?
     private var configWatcher: ConfigFileWatcher?
+    private var screensWakeObserver: NSObjectProtocol?
     private weak var editorModel: LayoutEditorModel?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         log.notice("Mullion launched. Accessibility trusted: \(AccessibilityGate.shared.isTrusted, privacy: .public)")
+
+        // Bound every AX round-trip (default ~6s). All AX calls here run on
+        // the main thread — the thread the mouse tap's callback also runs
+        // on — and right after a dock/undock every app is busy re-laying
+        // out. One unresponsive app could stall us long enough for macOS to
+        // disable the tap. Set on the system-wide element, it's the
+        // process-wide default.
+        AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 1.0)
 
         // Force lazy init + run a first match against the current displays
         // so `currentMatch` is populated for any subscriber that comes up
@@ -129,14 +139,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // Phase E #25 + #26: drag-to-snap (⌃ alone) and hold-modifier grid
-        // (⌃⌥) both subscribe to mouse events. `MouseEventTap` exposes a
+        // (⌃⌥) both subscribe to mouse events; the grid resolves its zone
+        // clicks from `onMouseDown`. `MouseEventTap` exposes a
         // single callback slot per event type, so we fan out here. Exact-
         // bitmask matching in `ModifierMask` ensures only one of the two
         // controllers activates for any given modifier state.
         let drag = dragOverlayController
         let grid = gridOverlayController
-        mouseEventTap.onMouseDown = { [weak drag] point, flags in
+        mouseEventTap.onMouseDown = { [weak drag, weak grid] point, flags in
             drag?.handleMouseDown(at: point, flags: flags)
+            grid?.handleMouseDown(at: point, flags: flags)
         }
         mouseEventTap.onMouseDragged = { [weak drag] point, flags in
             drag?.handleMouseDragged(at: point, flags: flags)
@@ -147,6 +159,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mouseEventTap.onFlagsChanged = { [weak drag, weak grid] flags in
             drag?.handleFlagsChanged(flags)
             grid?.handleFlagsChanged(flags)
+        }
+
+        // Display reconfiguration and display wake are when macOS is most
+        // likely to have disabled the tap without us seeing the notice.
+        DisplayRegistry.shared.observe(host: self) { [weak self] in
+            self?.mouseEventTap.ensureEnabled()
+        }
+        screensWakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.screensDidWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.mouseEventTap.ensureEnabled()
+            }
         }
 
         // FSEvents-driven auto-reload of every JSON config file. Manual

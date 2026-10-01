@@ -1,6 +1,7 @@
 import ApplicationServices
 import CoreGraphics
 import Foundation
+import os
 
 /// Sole path for mutating window position/size. Implements:
 ///   1. size → position → size dance (defeats macOS's clamping when crossing
@@ -27,11 +28,6 @@ enum WindowMutator {
         if hadEnhancedUI {
             setEnhancedUI(appElement, enabled: false)
         }
-        defer {
-            if hadEnhancedUI {
-                setEnhancedUI(appElement, enabled: true)
-            }
-        }
 
         if window.isFullscreen {
             AXUIElementSetAttributeValue(window.element, "AXFullScreen" as CFString, kCFBooleanFalse)
@@ -41,29 +37,42 @@ enum WindowMutator {
         write(window.element, position: frame.origin)
         write(window.element, size: frame.size)
 
-        if profile == .aggressive {
-            // Verify-and-retry: if the first write didn't land near target,
-            // schedule a single retry on the main actor ~40ms later so the
-            // EUI toggle has settled. Fire-and-forget — the dispatcher's
-            // return value reflects the immediate write; the retry quietly
-            // fixes Office/Electron windows that ignore the first attempt.
-            // Single retry cap (no Task loop). Uses Task { @MainActor }
-            // rather than DispatchQueue.main.asyncAfter so the AXUIElement
-            // capture stays inside MainActor isolation (it isn't Sendable).
-            if let landed = window.axFrame, !isClose(landed, to: frame) {
-                let target = frame
-                let element = window.element
-                Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(40))
-                    write(element, size: target.size)
-                    write(element, position: target.origin)
-                    write(element, size: target.size)
+        let landed = window.axFrame
+
+        // Verify-and-retry: if the first write didn't land near target,
+        // schedule a single retry on the main actor ~40ms later so the
+        // EUI toggle has settled. Fire-and-forget — the dispatcher's
+        // return value reflects the immediate write; the retry quietly
+        // fixes Office/Electron windows that ignore the first attempt.
+        // Single retry cap (no Task loop). Uses Task { @MainActor }
+        // rather than DispatchQueue.main.asyncAfter so the AXUIElement
+        // capture stays inside MainActor isolation (it isn't Sendable).
+        if profile == .aggressive, let landed, !isClose(landed, to: frame) {
+            log.notice("retry scheduled pid=\(window.pid, privacy: .public) target=\(String(describing: frame), privacy: .public) landed=\(String(describing: landed), privacy: .public)")
+            let target = frame
+            let element = window.element
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(40))
+                write(element, size: target.size)
+                write(element, position: target.origin)
+                write(element, size: target.size)
+                // EUI goes back on only after the retry. Restoring it
+                // first (as a `defer` on `set` used to) meant the retry ran
+                // with EUI on, so the app animated it — a second visible
+                // jump on exactly the Office/Electron windows EUI is
+                // toggled for.
+                if hadEnhancedUI {
+                    setEnhancedUI(appElement, enabled: true)
                 }
             }
+        } else if hadEnhancedUI {
+            setEnhancedUI(appElement, enabled: true)
         }
 
-        return window.axFrame
+        return landed
     }
+
+    private static let log = Logger(subsystem: "com.mullion.Mullion", category: "mutator")
 
     private static func isClose(_ a: CGRect, to b: CGRect) -> Bool {
         abs(a.origin.x - b.origin.x) < 2

@@ -13,7 +13,9 @@ import os
 /// `.listenOnly` doesn't require an Input Monitoring entitlement on
 /// macOS 14+. If `tapCreate` returns `nil` we silently no-op until the
 /// next mount attempt (the AX-trust-change handler in `AppDelegate`
-/// retries).
+/// retries). If macOS later disables the mounted tap, it's re-enabled on
+/// the spot (see `disposition(for:)`) and re-checked on display changes
+/// and wake (`ensureEnabled()`).
 @MainActor
 final class MouseEventTap {
     private let log = Logger(subsystem: "com.mullion.Mullion", category: "mouse-tap")
@@ -85,12 +87,62 @@ final class MouseEventTap {
     private static let callback: CGEventTapCallBack = { _, type, event, userInfo in
         guard let userInfo else { return Unmanaged.passUnretained(event) }
         let tap = Unmanaged<MouseEventTap>.fromOpaque(userInfo).takeUnretainedValue()
-        let location = event.location
-        let flags = event.flags
-        MainActor.assumeIsolated {
-            tap.handle(type: type, location: location, flags: flags)
+        switch disposition(for: type) {
+        case .reenable:
+            // Don't read location/flags: a tap-disabled notification isn't
+            // a real input event.
+            MainActor.assumeIsolated {
+                tap.reenable(after: type)
+            }
+        case .dispatch:
+            let location = event.location
+            let flags = event.flags
+            MainActor.assumeIsolated {
+                tap.handle(type: type, location: location, flags: flags)
+            }
+        case .ignore:
+            break
         }
         return Unmanaged.passUnretained(event)
+    }
+
+    enum Disposition: Equatable {
+        case dispatch
+        case reenable
+        case ignore
+    }
+
+    /// macOS disables a tap whose callback runs too long
+    /// (`.tapDisabledByTimeout` — typically the main thread stalled on an
+    /// AX call or a display reconfiguration) or on certain secure-input
+    /// transitions (`.tapDisabledByUserInput`), and tells the tap exactly
+    /// once. Missing that notice left drag-to-snap and the grid dead until
+    /// relaunch, so it maps to `.reenable`.
+    nonisolated static func disposition(for type: CGEventType) -> Disposition {
+        switch type {
+        case .leftMouseDown, .leftMouseDragged, .leftMouseUp, .flagsChanged:
+            return .dispatch
+        case .tapDisabledByTimeout, .tapDisabledByUserInput:
+            return .reenable
+        default:
+            return .ignore
+        }
+    }
+
+    private func reenable(after type: CGEventType) {
+        guard let port else { return }
+        CGEvent.tapEnable(tap: port, enable: true)
+        let reason = type == .tapDisabledByTimeout ? "timeout" : "user input"
+        log.notice("mouse event tap disabled by \(reason, privacy: .public) — re-enabled")
+    }
+
+    /// Belt-and-braces for a disable notice that never arrived: re-arm the
+    /// tap if it's mounted but off. Cheap; called on display changes and
+    /// on wake, the two moments a disable is most likely.
+    func ensureEnabled() {
+        guard let port, !CGEvent.tapIsEnabled(tap: port) else { return }
+        CGEvent.tapEnable(tap: port, enable: true)
+        log.notice("mouse event tap found disabled — re-enabled")
     }
 
     private func handle(type: CGEventType, location: CGPoint, flags: CGEventFlags) {

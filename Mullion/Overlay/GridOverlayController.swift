@@ -15,10 +15,13 @@ import os
 ///   - Click: hold ⌃⌥, click a zone → this controller snaps the
 ///     captured-at-reveal focused window into that zone.
 ///
-/// Modifier release (`onFlagsChanged`) hides the grid. Clicks are accepted
-/// via a non-activating `NSPanel` so the focused app keeps focus during
-/// the snap — the SwiftUI tap gesture handles the hit-test inside the
-/// rendered zone rects.
+/// Modifier release (`onFlagsChanged`) hides the grid. Clicks are resolved
+/// from `MouseEventTap`'s mouse-down against live screen geometry
+/// (`ZoneHitTest`), the same way drag-to-snap resolves its hover. The
+/// non-activating panels only paint the zones and swallow the click so it
+/// never reaches the app underneath (where ⌃⌥-click would open a context
+/// menu). They used to hit-test the click themselves, which broke silently
+/// whenever a cached panel's frame or screen went stale.
 @MainActor
 final class GridOverlayController {
     private let log = Logger(subsystem: "com.mullion.Mullion", category: "grid-overlay")
@@ -70,22 +73,31 @@ final class GridOverlayController {
         }
     }
 
-    // MARK: - Tap routing (called by GridOverlayPanel)
-
-    fileprivate func didTapZone(_ zoneID: UUID, on screen: NSScreen) {
-        let target: AXWindow?
-        if case .visible(let focused) = state {
-            target = focused ?? FocusedWindow.current()
-        } else {
-            target = FocusedWindow.current()
+    /// Grid clicks arrive here from the event tap, not from the panels.
+    /// Every early return logs at `.notice` so a click that snaps nothing
+    /// is distinguishable in the log from a click that never arrived.
+    func handleMouseDown(at axPoint: CGPoint, flags: CGEventFlags) {
+        guard case .visible(let focused) = state else { return }
+        // A modifier release lost while the tap was disabled (main-thread
+        // stall past the tap timeout) leaves the grid armed; an unmodified
+        // click must dismiss it, not snap the window captured at reveal.
+        guard settingsStore.settings.gridModifier.isSatisfied(by: flags) else {
+            state = .idle
+            hideOverlays()
+            log.notice("grid click without grid modifier — grid dismissed, no snap")
+            return
         }
-        guard let window = target else {
+        guard let hit = ZoneHitTest.resolve(axPoint: axPoint,
+                                            preferTopmost: true,
+                                            layoutFor: layoutForScreen) else {
+            log.notice("grid click outside any zone @ (\(Int(axPoint.x), privacy: .public), \(Int(axPoint.y), privacy: .public)) — no snap")
+            return
+        }
+        guard let window = focused ?? FocusedWindow.current() else {
             log.notice("grid tap with no focused window — no snap")
             return
         }
-        guard let layout = layoutForScreen(screen),
-              let zone = layout.zones.first(where: { $0.id == zoneID }) else { return }
-        snapWindow(window, to: zone, layout: layout, screen: screen)
+        snapWindow(window, to: hit.zone, layout: hit.layout, screen: hit.screen)
     }
 
     // MARK: - Snap
@@ -125,7 +137,7 @@ final class GridOverlayController {
         for screen in NSScreen.screens {
             guard let layout = layoutForScreen(screen) else { continue }
             let uuid = DisplayRegistry.uuid(for: screen)
-            let panel = overlays[uuid] ?? GridOverlayPanel(screen: screen, controller: self)
+            let panel = overlays[uuid] ?? GridOverlayPanel(screen: screen)
             overlays[uuid] = panel
             let tint = Color(nsColor: tintProvider.tint(for: screen))
             panel.render(screen: screen, layout: layout, tint: tint)
@@ -143,20 +155,16 @@ final class GridOverlayController {
 // MARK: - Per-display panel
 
 /// Non-activating `NSPanel` covering a single display. Accepts clicks
-/// (unlike the drag overlay's click-through window) so SwiftUI tap gestures
-/// can drive snap-by-tap. `.nonactivatingPanel` prevents the click from
-/// stealing focus from the user's actual window.
+/// (unlike the drag overlay's click-through window) only to swallow them —
+/// the controller resolves the zone from the event tap. `.nonactivatingPanel`
+/// prevents the click from stealing focus from the user's actual window.
 @MainActor
 private final class GridOverlayPanel {
     private let panel: NSPanel
     private let hosting: NSHostingView<GridContentView>
-    private weak var controller: GridOverlayController?
-    private let owningScreen: NSScreen
 
-    init(screen: NSScreen, controller: GridOverlayController) {
-        self.owningScreen = screen
-        self.controller = controller
-        let initial = GridContentView(zones: [], tint: .accentColor, onTap: { _ in })
+    init(screen: NSScreen) {
+        let initial = GridContentView(zones: [], tint: .accentColor)
         let view = NSHostingView(rootView: initial)
         self.hosting = view
 
@@ -185,6 +193,13 @@ private final class GridOverlayPanel {
     }
 
     func render(screen: NSScreen, layout: Layout, tint: Color) {
+        // Panels are cached per display UUID for the app's lifetime, but a
+        // display keeps its UUID while its frame moves (dock/undock, primary
+        // change, resolution change). Re-place on every render so the zones
+        // are painted where they now are, not where the display used to be.
+        if panel.frame != screen.frame {
+            panel.setFrame(screen.frame, display: false)
+        }
         var rendered: [GridContentView.RenderZone] = []
         rendered.reserveCapacity(layout.zones.count)
         for (idx, zone) in layout.zones.enumerated() {
@@ -207,11 +222,7 @@ private final class GridOverlayPanel {
                 frame: CGRect(x: localX, y: topY, width: appKit.width, height: appKit.height)
             ))
         }
-        let screenForTap = owningScreen
-        let onTap: (UUID) -> Void = { [weak controller] zoneID in
-            controller?.didTapZone(zoneID, on: screenForTap)
-        }
-        hosting.rootView = GridContentView(zones: rendered, tint: tint, onTap: onTap)
+        hosting.rootView = GridContentView(zones: rendered, tint: tint)
     }
 
     func show() {
@@ -234,7 +245,6 @@ private struct GridContentView: View {
 
     let zones: [RenderZone]
     let tint: Color
-    let onTap: (UUID) -> Void
 
     var body: some View {
         GeometryReader { _ in
@@ -258,7 +268,6 @@ private struct GridContentView: View {
                     x: zone.frame.origin.x + zone.frame.size.width / 2,
                     y: zone.frame.origin.y + zone.frame.size.height / 2
                 )
-                .onTapGesture { onTap(zone.id) }
             }
         }
         .ignoresSafeArea()
