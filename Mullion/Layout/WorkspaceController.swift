@@ -73,17 +73,30 @@ final class WorkspaceController {
         return Workspace(name: name, items: items)
     }
 
-    /// First zone (across all layouts) whose computed AppKit rect on `screen`
-    /// contains `point`. Layout iteration order matches `LayoutStore.layouts`
-    /// — the same first-match semantics ⌥⌃<n> resolution uses.
+    /// The zone on `screen` whose computed AppKit rect contains `point`.
+    /// Layouts are tried governing-first (`LayoutStore.rankedLayouts`), so a
+    /// window sitting in a zone of the layout the user actually snaps with is
+    /// captured as that zone. Trying them in file order instead filed it under
+    /// whichever matching layout was declared first, and restoring then moved
+    /// the window into that other layout's zone.
     private func zoneContaining(point: CGPoint, on screen: NSScreen) -> UUID? {
         let uuid = DisplayRegistry.uuid(for: screen)
         let aspect = Double(screen.frame.width / screen.frame.height)
-        for layout in layoutStore.layouts {
-            guard layout.displayPredicate.matches(uuid: uuid, aspectRatio: aspect) else { continue }
-            for zone in layout.zones {
-                let rect = FrameResolver.appKitFrame(for: zone, in: layout, on: screen)
-                if rect.contains(point) { return zone.id }
+        return Self.zoneID(
+            containing: point,
+            in: layoutStore.rankedLayouts(forScreenUUID: uuid, aspectRatio: aspect),
+            visibleFrame: screen.visibleFrame
+        )
+    }
+
+    /// Pure core of `zoneContaining`: the first layout, in the order given,
+    /// that has a zone containing `point` supplies it.
+    nonisolated static func zoneID(containing point: CGPoint,
+                                   in layouts: [Layout],
+                                   visibleFrame: CGRect) -> UUID? {
+        for layout in layouts {
+            if let index = ZoneHitTest.zoneIndex(at: point, in: layout, visibleFrame: visibleFrame) {
+                return layout.zones[index].id
             }
         }
         return nil
