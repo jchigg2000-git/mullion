@@ -60,7 +60,7 @@ final class LayoutResolutionTests: XCTestCase {
 
         // The arrangement nominates the less specific one; the user's explicit
         // choice must still win. This is the path that was silently dropped.
-        s.preferredLayoutID = wide.id
+        s.preferredLayoutProvider = { wide.id }
         XCTAssertEqual(s.layout(forScreenUUID: xeneon, aspectRatio: wideAspect)?.name, "Centre stage")
     }
 
@@ -71,8 +71,77 @@ final class LayoutResolutionTests: XCTestCase {
 
         // Preferring a layout pinned to a different display must not blank out
         // this screen — fall through to normal ranking.
-        s.preferredLayoutID = other.id
+        s.preferredLayoutProvider = { other.id }
         XCTAssertEqual(s.layout(forScreenUUID: xeneon, aspectRatio: wideAspect)?.name, "Xeneon 4-up")
+    }
+
+    // MARK: Arrangement-nominated layout follows the live match
+
+    private func arrangementStore() -> ArrangementStore {
+        let url = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("arrangements-\(UUID().uuidString).json")
+        addTeardownBlock { try? FileManager.default.removeItem(at: url) }
+        return ArrangementStore(url: url)
+    }
+
+    /// Regression: the nominated layout used to be pushed in on each
+    /// arrangement *transition*, so it was missing at launch, ignored when the
+    /// matched arrangement's default layout was edited, and kept after the
+    /// displays stopped matching. It is now read from the live match.
+    func test_preferredLayoutFollowsTheLiveArrangementMatch() {
+        let exact = layout("Xeneon 4-up", .specificDisplay(uuid: xeneon), zones: 4)
+        let wide = layout("Centre stage", .aspectRatioAtLeast(min: 2.3), zones: 3)
+        let other = layout("Wide alt", .aspectRatioAtLeast(min: 2.3), zones: 2)
+        let s = store([exact, wide, other])
+        let arrangements = arrangementStore()
+        let registry = ArrangementRegistry(arrangementStore: arrangements)
+        s.followPreferredLayout(of: registry)
+
+        // No arrangement matches: nothing is nominated, ranking decides.
+        XCTAssertNil(s.preferredLayoutID)
+        XCTAssertEqual(s.layout(forScreenUUID: xeneon, aspectRatio: wideAspect)?.name, "Xeneon 4-up")
+
+        // Saving the current arrangement with a default layout applies it.
+        var arrangement = registry.captureCurrent(name: "Desk", defaultLayoutID: wide.id)
+        XCTAssertEqual(s.preferredLayoutID, wide.id)
+        XCTAssertEqual(s.layout(forScreenUUID: xeneon, aspectRatio: wideAspect)?.name, "Centre stage")
+
+        // Editing the matched arrangement's default layout takes effect at
+        // once, with no display transition in between.
+        arrangement.defaultLayoutID = other.id
+        arrangements.upsert(arrangement)
+        registry.recompute()
+        XCTAssertEqual(s.layout(forScreenUUID: xeneon, aspectRatio: wideAspect)?.name, "Wide alt")
+
+        // Clearing the default, or no longer matching, drops the nomination.
+        arrangement.defaultLayoutID = nil
+        arrangements.upsert(arrangement)
+        registry.recompute()
+        XCTAssertNil(s.preferredLayoutID)
+        arrangement.defaultLayoutID = wide.id
+        arrangements.upsert(arrangement)
+        registry.recompute()
+        XCTAssertEqual(s.preferredLayoutID, wide.id)
+        arrangements.remove(arrangementWithID: arrangement.id)
+        registry.recompute()
+        XCTAssertNil(s.preferredLayoutID)
+        XCTAssertEqual(s.layout(forScreenUUID: xeneon, aspectRatio: wideAspect)?.name, "Xeneon 4-up")
+    }
+
+    func test_arrangementAlreadyMatchingAtLaunch_nominatesItsLayout() {
+        let wide = layout("Centre stage", .aspectRatioAtLeast(min: 2.3), zones: 3)
+        let exact = layout("Xeneon 4-up", .specificDisplay(uuid: xeneon), zones: 4)
+        let arrangements = arrangementStore()
+        // Saved in an earlier session: the registry finds it at init, so no
+        // transition ever fires `onMatched`.
+        let signature = Arrangement.currentSignature(from: DisplayRegistry.shared.screens)
+        arrangements.upsert(Arrangement(name: "Desk", signature: signature, defaultLayoutID: wide.id))
+
+        let registry = ArrangementRegistry(arrangementStore: arrangements)
+        let s = store([exact, wide])
+        s.followPreferredLayout(of: registry)
+
+        XCTAssertEqual(s.layout(forScreenUUID: xeneon, aspectRatio: wideAspect)?.name, "Centre stage")
     }
 
     func test_tieBrokenByDeclarationOrder() {

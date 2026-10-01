@@ -12,11 +12,23 @@ final class LayoutStore {
 
     var layouts: [Layout] { store.value.layouts }
 
-    /// The layout the active display *arrangement* nominates, when it has one.
-    /// `ArrangementRegistry` already surfaces this on every match; before this
-    /// existed the value was logged and then dropped, so a user picking a
-    /// default layout for an arrangement had no effect on snapping.
-    var preferredLayoutID: UUID?
+    /// Where the layout nominated by the active display *arrangement* comes
+    /// from. `followPreferredLayout(of:)` points it at the live arrangement
+    /// match, so the answer is read at resolution time. It used to be a value
+    /// pushed in on each arrangement transition, which went stale three ways:
+    /// never applied for the arrangement already matching at launch, ignored
+    /// when the matched arrangement's own default layout was edited, and kept
+    /// after the displays changed to an unsaved arrangement.
+    var preferredLayoutProvider: @MainActor () -> UUID? = { nil }
+
+    /// The layout the active display arrangement nominates, when it has one.
+    var preferredLayoutID: UUID? { preferredLayoutProvider() }
+
+    /// Track `registry`'s current match: its `defaultLayoutID` is preferred
+    /// while an arrangement matches, nothing is preferred when none does.
+    func followPreferredLayout(of registry: ArrangementRegistry) {
+        preferredLayoutProvider = { [weak registry] in registry?.currentMatch?.defaultLayoutID }
+    }
 
     /// The single place that answers "which layout governs this screen right
     /// now". Every caller — the grid overlay, drag-to-snap, and snap-by-index —
@@ -62,9 +74,8 @@ final class LayoutStore {
     }
 
     /// Replace the entire layout list. Used by the editor's drag-to-reorder.
-    /// Order is load-bearing: snap-by-index resolves to the first layout
-    /// whose displayPredicate matches the screen, so reordering controls
-    /// which layout wins on overlapping predicates.
+    /// Order is the last tiebreak in `layout(forScreenUUID:aspectRatio:)`:
+    /// among layouts equally specific for a screen, the earlier one wins.
     func replaceLayouts(_ layouts: [Layout]) {
         store.update { catalog in
             catalog.layouts = layouts

@@ -20,6 +20,11 @@ All notable changes to Mullion are documented here. Format follows
   overlapped.** The click now lands in the zone drawn on top.
 - **Every snap triggered a full configuration reload about a second
   later.** The config watcher now ignores Mullion's own history writes.
+- **An arrangement's "default layout" only took effect after a dock or
+  undock.** It was missing when Mullion launched with that arrangement
+  already connected, ignored when you changed the default of the
+  arrangement you were using, and kept after the displays stopped
+  matching any saved arrangement. It now follows the live match.
 - **The overlay accent kept the first wallpaper's tint all session.**
   It now recomputes when a display's wallpaper changes.
 

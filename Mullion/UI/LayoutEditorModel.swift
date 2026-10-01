@@ -219,8 +219,8 @@ final class LayoutEditorModel {
         selectedZoneID = layout.zones.first?.id
     }
 
-    /// Drag-to-reorder. Order matters: snap-by-index resolves to the first
-    /// layout whose displayPredicate matches the screen.
+    /// Drag-to-reorder. Order is the last tiebreak when several layouts are
+    /// equally specific for a screen: the earlier one governs.
     func moveLayouts(from source: IndexSet, to destination: Int) {
         var copy = layouts
         copy.move(fromOffsets: source, toOffset: destination)
