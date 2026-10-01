@@ -12,6 +12,9 @@ final class BindingStore {
 
     func reload() { store.reload() }
 
+    /// Write any edit still inside its debounce window. Called on quit.
+    func flushPendingWrites() { store.flushIfPending() }
+
     func upsert(_ binding: HotkeyBinding) {
         store.update { catalog in
             if let idx = catalog.bindings.firstIndex(where: { $0.id == binding.id }) {

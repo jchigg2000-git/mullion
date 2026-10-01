@@ -57,6 +57,9 @@ final class LayoutStore {
         store.reload()
     }
 
+    /// Write any edit still inside its debounce window. Called on quit.
+    func flushPendingWrites() { store.flushIfPending() }
+
     func upsert(_ layout: Layout) {
         store.update { catalog in
             if let idx = catalog.layouts.firstIndex(where: { $0.id == layout.id }) {

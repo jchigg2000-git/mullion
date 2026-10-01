@@ -115,7 +115,10 @@ User-editable configuration lives in `~/Library/Application Support/Mullion/`:
 `layouts.json`, `bindings.json`, `app-rules.json`, `window-history.json`,
 `settings.json`. Pick "Reload Layouts" from the menu-bar item after editing.
 Drag-snap and grid-overlay modifier keys, and auto-restore, are also
-editable from the layout editor's Preferences pane.
+editable from the layout editor's Preferences pane. If a file can't be
+parsed (a typo in a hand edit), Mullion keeps running on what it had and,
+before it next saves that file, copies the unreadable one beside it as
+`<name>.json.unreadable-<timestamp>`.
 
 ## Project layout
 

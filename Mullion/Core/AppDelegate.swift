@@ -203,6 +203,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Stores write 500 ms after their last edit; an edit made just before
+    /// quitting (the editor, a window snap's history record) would be lost.
+    func applicationWillTerminate(_ notification: Notification) {
+        layoutStore.flushPendingWrites()
+        bindingStore.flushPendingWrites()
+        appRuleStore.flushPendingWrites()
+        historyStore.flushPendingWrites()
+        settingsStore.flushPendingWrites()
+        arrangementStore.flushPendingWrites()
+        workspaceStore.flushPendingWrites()
+    }
+
     /// Restore the workspace bound to `arrangement` if any. Gated by
     /// `autoRestoreEnabled` + AX trust so the callback can fire from
     /// arbitrary display-change events without surprising the user when

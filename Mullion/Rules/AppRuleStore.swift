@@ -13,6 +13,9 @@ final class AppRuleStore {
 
     func reload() { store.reload() }
 
+    /// Write any edit still inside its debounce window. Called on quit.
+    func flushPendingWrites() { store.flushIfPending() }
+
     func upsert(_ rule: AppRule) {
         store.update { catalog in
             if let idx = catalog.rules.firstIndex(where: { $0.id == rule.id }) {
