@@ -31,6 +31,16 @@ final class WorkspaceController {
     /// `LearnedPlacement` already owns that responsibility; a workspace is a
     /// zone snapshot, not a free-frame snapshot.
     func captureCurrent(name: String) -> Workspace {
+        let workspace = snapshot(name: name)
+        workspaceStore.upsert(workspace)
+        log.notice("captured workspace '\(name, privacy: .public)' with \(workspace.items.count, privacy: .public) item(s)")
+        return workspace
+    }
+
+    /// The capture itself, without touching the store. Re-capturing an
+    /// existing workspace takes its items from here and saves once, rather
+    /// than persisting a throwaway workspace just to delete it again.
+    func snapshot(name: String) -> Workspace {
         var items: [WorkspaceItem] = []
         for runningApp in NSWorkspace.shared.runningApplications {
             guard runningApp.activationPolicy == .regular,
@@ -60,10 +70,7 @@ final class WorkspaceController {
                 ))
             }
         }
-        let workspace = Workspace(name: name, items: items)
-        workspaceStore.upsert(workspace)
-        log.notice("captured workspace '\(name, privacy: .public)' with \(items.count, privacy: .public) item(s)")
-        return workspace
+        return Workspace(name: name, items: items)
     }
 
     /// First zone (across all layouts) whose computed AppKit rect on `screen`

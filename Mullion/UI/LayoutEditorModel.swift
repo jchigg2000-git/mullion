@@ -748,12 +748,10 @@ final class LayoutEditorModel {
     /// wants the existing workspace name/id to keep matching.
     func recaptureWorkspace(id: UUID) {
         guard var workspace = workspaceStore.workspaces.first(where: { $0.id == id }) else { return }
-        // Run a throwaway capture, then transplant its items into the
-        // existing workspace so id + name survive.
-        let snapshot = workspaceController.captureCurrent(name: workspace.name)
-        // captureCurrent persisted `snapshot` as a *new* workspace — remove
-        // that disposable one before saving the in-place update.
-        workspaceStore.remove(workspaceWithID: snapshot.id)
+        // Snapshot without persisting, then transplant the items into the
+        // existing workspace so id, name and arrangement binding survive.
+        // One save, so the store never holds a half-recaptured state.
+        let snapshot = workspaceController.snapshot(name: workspace.name)
         workspace.items = snapshot.items
         workspace.capturedAt = snapshot.capturedAt
         workspaceStore.upsert(workspace)

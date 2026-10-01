@@ -80,9 +80,12 @@ gates anything
 >   magnification zone. Cheapest A/B next time: quit Mullion and repeat; then try with that
 >   Spaces setting off and/or magnification off (or a `outerMargin.bottom` on lower zones).
 > - ⬜ Not fixed (judged real but deferred by the review): grid hit-test is geometry-only, so a
->   click on a fully transparent panel pixel could still snap — marginal; tap re-arm doesn't
->   resync modifier state (`CGEventSource.flagsState`), so a stuck grid stays painted until the
->   next click.
+>   click on a fully transparent panel pixel could still snap — marginal.
+> - ✅ Tap re-arm now resyncs modifier state (`MouseEventTap.resyncModifiers()` reads
+>   `CGEventSource.flagsState` after every re-enable and feeds it through `onFlagsChanged`), so a
+>   ⌃⌥ release lost while the tap was off hides the grid instead of leaving it painted until the
+>   next click. Landed on `main` 2026-10-01 (90 tests green); like the rest of the display-change
+>   work, not live-verified.
 > - Setup note, not a bug: the saved "3 displays" arrangement doesn't match when the 2560×720
 >   display is off, so the 2-display dock gets no default layout / workspace auto-restore. The
 >   menu offers "Save current displays as arrangement…".
@@ -140,17 +143,21 @@ Folded from `docs/handoff.md` § "Deferred / open — P2."
 - ✅ **DEFER-1** Arrangement match doesn't behaviorally apply `defaultLayoutID` — **DONE in 1.0.1
   (`e5b56d9`)**: `onMatched` now sets `layoutStore.preferredLayoutID`, which governs layout
   resolution (see `CHANGELOG.md` 1.0.1).
-- 🔬 **OWED — does the "non-atomic" concern on workspace capture still apply?** `docs/handoff.md`
-  named `WorkspaceController.recapture` as non-atomic; that method doesn't exist under that name
-  anymore — current code has `captureCurrent(name:)` (`WorkspaceController.swift:33`). Unclear
-  whether this is a rename of the same code path or a rewrite that resolved the concern. Asked,
-  not answered; do not treat as closed either way.
-- ⬜ **DEFER-2** `ModifierMask` chord coverage described as "partial" (`controlOption`,
-  `controlShift`, `optionShift`) — the enum itself (`Settings/AppSettings.swift:18-20`) defines
-  all three cases, so the gap (if any) is in what's exposed in UI, not the data model. Not
-  independently re-verified past that; carried forward as-is.
+- ✅ **OWED (workspace capture atomicity)** — **RESOLVED 2026-10-01.** The concern was real, under a
+  different name: the handoff's `WorkspaceController.recapture` maps to
+  `LayoutEditorModel.recaptureWorkspace`, which ran `captureCurrent` (saving a brand-new
+  workspace) and then deleted that throwaway before upserting the real one. All of it ran in one
+  main-thread turn behind `JSONStore`'s debounced atomic write, so disk never held the throwaway,
+  but the store did. It now takes `WorkspaceController.snapshot(name:)` (no store access) and saves
+  once; `captureCurrent` = snapshot + one upsert. Covered by `WorkspaceControllerTests`.
+- ✅ **DEFER-2** `ModifierMask` chord coverage — **CLOSED 2026-10-01, no gap found.** The enum
+  defines all three chords (`Settings/AppSettings.swift:18-20`), the Preferences pane lists every
+  case (`SettingsEditorView.modifierPicker` iterates `ModifierMask.allCases`), and
+  `isSatisfied(by:)` matches any set exactly, so the "partial" note described the handoff-era
+  state, not a missing path.
 - ⬜ **DEFER-3** No tests for the Phase E overlays or `WorkspaceController` capture/restore —
-  only exercised via the running app.
+  only exercised via the running app. (Only capture's store-write contract is covered, by
+  `WorkspaceControllerTests`; the AX walk, zone matching and restore are not.)
 - ✅ **DEFER-4** (superseded framing) `SystemWindowManager` fallback (build-order item #29,
   "Phase G") — genuinely unbuilt, confirmed by `CompatProfile.swift:16`'s own comment: "Treated
   as `.standard` by the mutator until Phase G ships." **Status: BACKLOG. Not a blocker.**
@@ -186,8 +193,7 @@ shipped/open status, verified against source and `git log` this pass:
 
 ## §5 Open-decisions index
 
-- 🔬 OWED (§3 DEFER-1 note): does `WorkspaceController.captureCurrent` resolve the atomicity
-  concern originally raised about `recapture`, or is it still open under the new name?
+None open. (The workspace-capture atomicity question was resolved 2026-10-01; see §3.)
 
 ---
 

@@ -12,6 +12,14 @@ All notable changes to Mullion are documented here. Format follows
   macOS could disable the mouse event tap and Mullion never re-armed
   it; grid clicks also resolved against stale display geometry. The
   tap is now re-armed and grid clicks are hit-tested live.
+- **The grid could stay on screen after you let go of ⌃⌥.** If macOS
+  had the event tap disabled at that moment, the release was never
+  seen and the grid stayed painted until the next click. Re-arming the
+  tap now re-reads the live modifier state.
+- **Clicking the grid snapped into the wrong zone when zones
+  overlapped.** The click now lands in the zone drawn on top.
+- **Every snap triggered a full configuration reload about a second
+  later.** The config watcher now ignores Mullion's own history writes.
 - **The overlay accent kept the first wallpaper's tint all session.**
   It now recomputes when a display's wallpaper changes.
 

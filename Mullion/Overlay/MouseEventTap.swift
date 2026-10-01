@@ -15,7 +15,9 @@ import os
 /// next mount attempt (the AX-trust-change handler in `AppDelegate`
 /// retries). If macOS later disables the mounted tap, it's re-enabled on
 /// the spot (see `disposition(for:)`) and re-checked on display changes
-/// and wake (`ensureEnabled()`).
+/// and wake (`ensureEnabled()`). Every re-arm also re-delivers the live
+/// modifier state (`resyncModifiers()`), because releases during the gap
+/// were never seen.
 @MainActor
 final class MouseEventTap {
     private let log = Logger(subsystem: "com.mullion.Mullion", category: "mouse-tap")
@@ -31,6 +33,10 @@ final class MouseEventTap {
     /// Fires on any modifier key change — used by overlay controllers to
     /// cancel a drag if the user releases the activation modifier mid-drag.
     var onFlagsChanged: ((CGEventFlags) -> Void)?
+
+    /// Where `resyncModifiers()` reads the real modifier state. Injectable
+    /// so tests don't depend on what the machine's keyboard is doing.
+    var currentFlags: () -> CGEventFlags = { CGEventSource.flagsState(.combinedSessionState) }
 
     private static let eventMask: CGEventMask =
         (1 << CGEventType.leftMouseDown.rawValue)
@@ -134,6 +140,23 @@ final class MouseEventTap {
         CGEvent.tapEnable(tap: port, enable: true)
         let reason = type == .tapDisabledByTimeout ? "timeout" : "user input"
         log.notice("mouse event tap disabled by \(reason, privacy: .public) — re-enabled")
+        // We're inside the tap callback; a resync can run AX calls (the grid
+        // snapshots the focused window), and a slow callback is exactly what
+        // got the tap disabled. Let the callback return first.
+        Task { @MainActor [weak self] in
+            self?.resyncModifiers()
+        }
+    }
+
+    /// While the tap was off, modifier changes were never delivered, so a
+    /// release that happened in that gap leaves the grid (or a drag overlay)
+    /// painted until the next click. Re-deliver the modifier state the OS
+    /// reports now through the normal `onFlagsChanged` path, so the
+    /// controllers see the release (or the press) they missed.
+    func resyncModifiers() {
+        let flags = currentFlags()
+        log.notice("mouse event tap re-armed — resyncing modifier state (flags \(flags.rawValue, privacy: .public))")
+        onFlagsChanged?(flags)
     }
 
     /// Belt-and-braces for a disable notice that never arrived: re-arm the
@@ -143,6 +166,7 @@ final class MouseEventTap {
         guard let port, !CGEvent.tapIsEnabled(tap: port) else { return }
         CGEvent.tapEnable(tap: port, enable: true)
         log.notice("mouse event tap found disabled — re-enabled")
+        resyncModifiers()
     }
 
     private func handle(type: CGEventType, location: CGPoint, flags: CGEventFlags) {
