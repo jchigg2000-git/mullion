@@ -13,7 +13,7 @@ struct HotkeyBinding: Codable, Identifiable, Hashable {
 
     enum Role: String, Codable, Hashable {
         case snap   // move the focused window to the next target
-        case focus  // focus the window currently in the next target (v1: stub)
+        case focus  // focus the window currently in the next target
     }
 
     init(id: UUID = UUID(),

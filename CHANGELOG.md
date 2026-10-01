@@ -4,6 +4,17 @@ All notable changes to Mullion are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); Mullion uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Snapping stopped working after docking or undocking a display.**
+  macOS could disable the mouse event tap and Mullion never re-armed
+  it; grid clicks also resolved against stale display geometry. The
+  tap is now re-armed and grid clicks are hit-tested live.
+- **The overlay accent kept the first wallpaper's tint all session.**
+  It now recomputes when a display's wallpaper changes.
+
 ## [1.0.1] - 2026-09-10
 
 ### Fixed

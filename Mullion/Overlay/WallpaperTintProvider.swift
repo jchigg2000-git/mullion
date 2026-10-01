@@ -7,29 +7,41 @@ import CoreImage
 ///
 /// Lazy + cached: the first request for a display computes the tint (the
 /// `CIAreaAverage` filter downsamples the wallpaper to one pixel on the
-/// GPU, then we rotate hue 180°); every subsequent request reads the
-/// cache. Wallpaper changes during a session don't refresh — relaunching
-/// picks them up. Falls back to `.controlAccentColor` if the wallpaper
-/// image can't be loaded.
+/// GPU, then we rotate hue 180°); later requests read the cache as long as
+/// the display's wallpaper URL is unchanged. A new wallpaper (or a Space
+/// with a different one) changes the URL and recomputes. A dynamic
+/// wallpaper that changes appearance under the same URL keeps its first
+/// tint. Falls back to `.controlAccentColor` if the wallpaper image can't
+/// be loaded.
 ///
 /// Used by both `DragOverlayController` (#25) and `GridOverlayController`
 /// (#26) — they share one provider per controller, but the underlying
 /// per-display cache lookup is what makes this safe to instantiate twice.
 @MainActor
 final class WallpaperTintProvider {
-    private var cache: [String: NSColor] = [:]
+    private var cache: [String: (wallpaperURL: URL?, color: NSColor)] = [:]
     private let ciContext = CIContext()
 
     func tint(for screen: NSScreen) -> NSColor {
-        let uuid = DisplayRegistry.uuid(for: screen)
-        if let cached = cache[uuid] { return cached }
-        let color = compute(for: screen) ?? .controlAccentColor
-        cache[uuid] = color
+        let url = NSWorkspace.shared.desktopImageURL(for: screen)
+        return tint(displayUUID: DisplayRegistry.uuid(for: screen), wallpaperURL: url) {
+            self.compute(wallpaperURL: url)
+        }
+    }
+
+    /// Cache lookup keyed by display UUID, invalidated when that display's
+    /// wallpaper URL differs from the one the cached tint was computed for.
+    func tint(displayUUID: String, wallpaperURL: URL?, compute: () -> NSColor?) -> NSColor {
+        if let cached = cache[displayUUID], cached.wallpaperURL == wallpaperURL {
+            return cached.color
+        }
+        let color = compute() ?? .controlAccentColor
+        cache[displayUUID] = (wallpaperURL, color)
         return color
     }
 
-    private func compute(for screen: NSScreen) -> NSColor? {
-        guard let url = NSWorkspace.shared.desktopImageURL(for: screen),
+    private func compute(wallpaperURL: URL?) -> NSColor? {
+        guard let url = wallpaperURL,
               let ciImage = CIImage(contentsOf: url) else {
             return nil
         }
