@@ -23,18 +23,19 @@ gates anything
 
 ## §0 Do next
 
-> ### ▶ RESUME HERE — 2026-09-26: display-change fixes PARKED on a branch (not merged, not released)
+> ### ▶ RESUME HERE — 2026-09-26: display-change fixes on `main`, live check owed, NOT released
 >
-> **State:** branch `fix/display-change-resilience` (3 commits on `main` @ `f90b1c2`, v1.0.1),
-> not pushed, not merged. Owner parked it mid-verification — windows being rearranged during
-> testing was interfering with other work. **Nothing here is a blocker for anything else.**
+> **State:** the parked branch `fix/display-change-resilience` (on top of v1.0.1 @ `f90b1c2`)
+> was merged to `main` on 2026-10-01 by the repo-sweep loop (86 tests green at merge). Owner
+> had parked it mid-verification — windows being rearranged during testing was interfering
+> with other work. Not released. **Nothing here is a blocker for anything else.**
 >
-> **▶ NEXT ACTION:** finish the owner-run live check (undock → redock with the dev build, one ⌃⌥
-> grid click + one ⌃-drag per display after each), then merge and cut 1.0.2 via
+> **▶ NEXT ACTION:** finish the owner-run live check (undock → redock with a dev build of
+> `main`, one ⌃⌥ grid click + one ⌃-drag per display after each) before cutting 1.0.2 via
 > `docs/release.md`. Optionally run one more opus review round first (round 2 was stopped
 > before it reported).
 >
-> #### On the branch
+> #### What the merge brought
 > - `0d3bea4` docs(release): Homebrew cask bump step (from another session; owner OK'd shipping it).
 > - `8af76a9` the fixes: re-arm the mouse event tap on `tapDisabledByTimeout/ByUserInput` and
 >   re-check it on display change + display wake; grid clicks resolved from the tap against
