@@ -59,13 +59,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // so `currentMatch` is populated for any subscriber that comes up
         // later in launch (status menu, editor window).
         arrangementRegistry.recompute()
+        // The matched arrangement's default layout governs snapping. Read live
+        // from the registry rather than pushed from `onMatched`, so it applies
+        // at launch, follows edits to the arrangement, and lapses when the
+        // displays stop matching any saved arrangement.
+        layoutStore.followPreferredLayout(of: arrangementRegistry)
         arrangementRegistry.onMatched = { [weak self] arrangement, layoutID in
             guard let self else { return }
             let layoutName = layoutID.flatMap { id in
                 self.layoutStore.layouts.first { $0.id == id }?.name
             } ?? "—"
             self.log.notice("arrangement '\(arrangement.name, privacy: .public)' matched (default layout: \(layoutName, privacy: .public))")
-            self.layoutStore.preferredLayoutID = layoutID
             self.autoRestoreBoundWorkspaces(for: arrangement, trigger: "onMatched")
         }
         arrangementRegistry.onUnknown = { [weak self] signature in
