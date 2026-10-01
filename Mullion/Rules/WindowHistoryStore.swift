@@ -12,6 +12,9 @@ final class WindowHistoryStore {
 
     func reload() { store.reload() }
 
+    /// Write any edit still inside its debounce window. Called on quit.
+    func flushPendingWrites() { store.flushIfPending() }
+
     func placement(bundleID: String, displayUUID: String) -> LearnedPlacement? {
         store.value.placements.first {
             $0.bundleID == bundleID && $0.displayUUID == displayUUID

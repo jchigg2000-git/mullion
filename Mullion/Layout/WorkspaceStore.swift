@@ -12,6 +12,9 @@ final class WorkspaceStore {
 
     func reload() { store.reload() }
 
+    /// Write any edit still inside its debounce window. Called on quit.
+    func flushPendingWrites() { store.flushIfPending() }
+
     func upsert(_ workspace: Workspace) {
         store.update { catalog in
             if let idx = catalog.workspaces.firstIndex(where: { $0.id == workspace.id }) {

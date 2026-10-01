@@ -25,6 +25,13 @@ All notable changes to Mullion are documented here. Format follows
   already connected, ignored when you changed the default of the
   arrangement you were using, and kept after the displays stopped
   matching any saved arrangement. It now follows the live match.
+- **A config file with a typo could be overwritten with defaults.** If a
+  hand-edited `layouts.json` (or any other config file) could not be
+  parsed, Mullion fell back to defaults and the next edit saved over your
+  file. It now logs the failure and copies the unreadable file aside as
+  `<name>.json.unreadable-<timestamp>` before saving.
+- **An edit made just before quitting could be lost.** Changes are saved
+  half a second after the last edit, and nothing saved them on quit.
 - **The overlay accent kept the first wallpaper's tint all session.**
   It now recomputes when a display's wallpaper changes.
 

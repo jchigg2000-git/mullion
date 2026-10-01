@@ -33,4 +33,7 @@ final class SettingsStore {
     }
 
     func reload() { store.reload() }
+
+    /// Write any edit still inside its debounce window. Called on quit.
+    func flushPendingWrites() { store.flushIfPending() }
 }
