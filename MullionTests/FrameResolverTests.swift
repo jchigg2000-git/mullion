@@ -34,16 +34,18 @@ final class FrameResolverTests: XCTestCase {
         let rect = FrameResolver.appKitFrame(for: zone, in: visibleFrame)
         XCTAssertEqual(rect.origin.x, 0, accuracy: 0.01)
         XCTAssertEqual(rect.origin.y, 540, accuracy: 0.01)
-        XCTAssertEqual(rect.size.width, 639.36, accuracy: 0.01)
+        // 0.333 × 1920 = 639.36 → edge snapped to 639.
+        XCTAssertEqual(rect.size.width, 639, accuracy: 0.01)
         XCTAssertEqual(rect.size.height, 540, accuracy: 0.01)
     }
 
     func test_sixPaneBottomRight() {
         let zone = Zone(name: "BR", x: 0.667, y: 0.5, width: 0.333, height: 0.5, anchor: .topLeft)
         let rect = FrameResolver.appKitFrame(for: zone, in: visibleFrame)
-        XCTAssertEqual(rect.origin.x, 1280.64, accuracy: 0.01)
+        // Left edge 1280.64 → 1281; right edge 1920 stays, so width 639.
+        XCTAssertEqual(rect.origin.x, 1281, accuracy: 0.01)
         XCTAssertEqual(rect.origin.y, 0, accuracy: 0.01)
-        XCTAssertEqual(rect.size.width, 639.36, accuracy: 0.01)
+        XCTAssertEqual(rect.size.width, 639, accuracy: 0.01)
         XCTAssertEqual(rect.size.height, 540, accuracy: 0.01)
     }
 
@@ -61,8 +63,9 @@ final class FrameResolverTests: XCTestCase {
         let visible = CGRect(x: 0, y: 0, width: 1920, height: 1055)
         let zone = Zone(name: "T", x: 0, y: 0, width: 1, height: 0.5, anchor: .topLeft)
         let rect = FrameResolver.appKitFrame(for: zone, in: visible)
-        XCTAssertEqual(rect.origin.y, 527.5, accuracy: 0.01)
-        XCTAssertEqual(rect.size.height, 527.5, accuracy: 0.01)
+        // Bottom edge 527.5 snaps to 528; top edge 1055 stays.
+        XCTAssertEqual(rect.origin.y, 528, accuracy: 0.01)
+        XCTAssertEqual(rect.size.height, 527, accuracy: 0.01)
     }
 
     func test_sizeOverride_centerAnchor_centersWindow() {
@@ -148,9 +151,10 @@ final class FrameResolverTests: XCTestCase {
             for: zone, in: visibleFrame,
             outerMargin: .zero, innerGap: 8
         )
-        // Each side shrinks by 4pt → width shrinks by 8, height shrinks by 8.
-        XCTAssertEqual(rect.size.width, 0.334 * 1920 - 8, accuracy: 0.01)
-        XCTAssertEqual(rect.size.height, 0.334 * 1080 - 8, accuracy: 0.01)
+        // Each side shrinks by 4pt, then edges snap to whole points:
+        // x 639.36+4 → 643, maxX 1280.64-4 → 1277; y 359.64+4 → 364,
+        // maxY 720.36-4 → 716.
+        XCTAssertEqual(rect, CGRect(x: 643, y: 364, width: 634, height: 352))
     }
 
     func test_outerMargin_and_innerGap_combined() {
@@ -185,5 +189,49 @@ final class FrameResolverTests: XCTestCase {
         // Layout overload's inputs. Equivalent outputs prove the overload
         // forwards margins/gap correctly.
         XCTAssertEqual(direct.size.width, 946, accuracy: 0.01)
+    }
+
+    // MARK: - Whole-point edges (LIMIT-3)
+
+    func test_thirds_landOnWholePoints_andTileFlush() {
+        // 1512-wide visible frame: thirds fall on 503.99… and 1007.99…, which
+        // the window server truncated to land windows a point off (dx=-1).
+        let visible = CGRect(x: 0, y: 0, width: 1512, height: 945)
+        let thirds = [
+            Zone(name: "A", x: 0, y: 0, width: 1.0 / 3, height: 1, anchor: .topLeft),
+            Zone(name: "B", x: 1.0 / 3, y: 0, width: 1.0 / 3, height: 1, anchor: .topLeft),
+            Zone(name: "C", x: 2.0 / 3, y: 0, width: 1.0 / 3, height: 1, anchor: .topLeft),
+        ]
+        let rects = thirds.map { FrameResolver.appKitFrame(for: $0, in: visible) }
+        for rect in rects {
+            for value in [rect.minX, rect.minY, rect.width, rect.height] {
+                XCTAssertEqual(value, value.rounded(), "\(rect) has a fractional edge")
+            }
+        }
+        XCTAssertEqual(rects[0].maxX, rects[1].minX)
+        XCTAssertEqual(rects[1].maxX, rects[2].minX)
+        XCTAssertEqual(rects[0].minX, 0)
+        XCTAssertEqual(rects[2].maxX, 1512)
+    }
+
+    func test_oddInnerGap_keepsWholePointsAndFullGap() {
+        // A 5pt gap splits into 2.5 per side; neighbours must still sit on
+        // whole points with exactly 5pt between them.
+        let left = Zone(name: "L", x: 0, y: 0, width: 0.5, height: 1, anchor: .topLeft)
+        let right = Zone(name: "R", x: 0.5, y: 0, width: 0.5, height: 1, anchor: .topLeft)
+        let l = FrameResolver.appKitFrame(for: left, in: visibleFrame, innerGap: 5)
+        let r = FrameResolver.appKitFrame(for: right, in: visibleFrame, innerGap: 5)
+        XCTAssertEqual(l, CGRect(x: 0, y: 0, width: 958, height: 1080))
+        XCTAssertEqual(r, CGRect(x: 963, y: 0, width: 957, height: 1080))
+    }
+
+    func test_sizeOverride_centeredOddSize_landsOnWholePoints() {
+        let zone = Zone(
+            name: "Centered", x: 0, y: 0, width: 1, height: 1,
+            anchor: .center, sizeOverride: .init(width: 801, height: 601)
+        )
+        let rect = FrameResolver.appKitFrame(for: zone, in: visibleFrame)
+        // (1920-801)/2 = 559.5 and (1080-601)/2 = 239.5: origin snaps, size holds.
+        XCTAssertEqual(rect, CGRect(x: 560, y: 240, width: 801, height: 601))
     }
 }

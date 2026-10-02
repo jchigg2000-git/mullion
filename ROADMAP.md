@@ -134,9 +134,11 @@ Folded from `docs/handoff.md` § "Deferred / open — P1," cross-checked against
   min-size-aware case exists yet).
 - ⬜ **LIMIT-2** Finder in a fullscreen Space won't move — AX-resistant, possibly inherent to
   fullscreen Spaces.
-- ⬜ **LIMIT-3** iTerm sidebar off-by-1px (`dx=-1`) — masked by the `< 2` idempotence tolerance
-  in `WorkspaceController.framesEqualWithinTolerance`, but the rounding source lives in
-  `FrameResolver`/`Geometry`. Not independently re-verified this pass; carried forward.
+- ✅ **LIMIT-3** iTerm sidebar off-by-1px (`dx=-1`) — **fixed on `main` 2026-10-01, not
+  live-verified.** The source was `FrameResolver` emitting fractional zone edges (e.g. a third
+  of 1512 = 503.99…) that the window server truncated; it now snaps every edge to a whole point
+  (`FrameResolver.snappedToWholePoints`), so shared boundaries stay flush. The `< 2` restore
+  tolerance stays as a safety net. Covered by `FrameResolverTests`.
 - ~~⬜ **LIMIT-5 — Settings UI for `dragSnapModifier`/`gridModifier` still hand-edited via
   `settings.json`.**~~ **DONE `e423244`** — "feat: Preferences pane for drag-snap & grid overlay
   modifiers," shipped after `docs/handoff.md` was written; README already documents it. Original
