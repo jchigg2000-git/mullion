@@ -39,13 +39,29 @@ enum FrameResolver {
         if innerGap > 0 {
             zoneRect = applyInnerGap(zoneRect, gap: innerGap, zone: zone)
         }
+        zoneRect = snappedToWholePoints(zoneRect)
 
         guard let override = zone.sizeOverride else { return zoneRect }
-        return anchored(
+        return snappedToWholePoints(anchored(
             size: CGSize(width: override.width, height: override.height),
             within: zoneRect,
             anchor: zone.anchor
-        )
+        ))
+    }
+
+    /// Round each EDGE (not origin and size separately) to a whole point.
+    /// Fractional zones (thirds, a menu bar of odd height halved, an odd
+    /// `innerGap` split in two) otherwise produce targets like x=503.99 that
+    /// the window server truncates, landing windows a point off their zone
+    /// (LIMIT-3's `dx=-1`) and making the restore idempotence check rely on
+    /// its tolerance. Rounding edges keeps neighbouring zones flush: a shared
+    /// boundary rounds to the same value from both sides.
+    static func snappedToWholePoints(_ rect: CGRect) -> CGRect {
+        let minX = rect.minX.rounded()
+        let minY = rect.minY.rounded()
+        let maxX = rect.maxX.rounded()
+        let maxY = rect.maxY.rounded()
+        return CGRect(x: minX, y: minY, width: max(0, maxX - minX), height: max(0, maxY - minY))
     }
 
     // MARK: Internals

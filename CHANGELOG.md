@@ -42,6 +42,10 @@ All notable changes to Mullion are documented here. Format follows
   per-zone focus list, which only hotkey and menu snaps fed.
 - **The overlay accent kept the first wallpaper's tint all session.**
   It now recomputes when a display's wallpaper changes.
+- **Windows could land a point off their zone.** Zones that don't divide
+  the screen evenly (thirds, halves under an odd-height menu bar, an odd
+  gap) produced fractional targets that macOS rounded down. Zone edges
+  are now snapped to whole points, so neighbouring zones stay flush.
 
 ## [1.0.1] - 2026-09-10
 
