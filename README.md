@@ -18,16 +18,17 @@ brew install --cask jchigg2000-git/tap/mullion
 Homebrew now gates third-party taps, so the first install asks you to trust
 the tap — `brew trust jchigg2000-git/tap` — before it will resolve.
 
-Or download [Mullion-1.0.0.dmg](https://github.com/jchigg2000-git/mullion/releases/latest)
+Or download the DMG from the
+[latest release](https://github.com/jchigg2000-git/mullion/releases/latest)
 directly. Builds are signed and notarized with a Developer ID, and update
 themselves via Sparkle. Requires macOS 15 or later.
 
 > **Status:** beta. The core engine (zone snapping, hotkey cycling, per-app
 > rules, learned placements, auto-restore, SwiftUI layout editor) is shipped;
-> [v1.0.0](https://github.com/jchigg2000-git/mullion/releases/tag/v1.0.0) is
-> out with signed, notarized, Sparkle auto-updating builds. See
-> [docs/design/v1.md](docs/design/v1.md) for the full scope and remaining
-> build order, [CHANGELOG.md](CHANGELOG.md) for release notes, and
+> releases since v1.0.0 ship as signed, notarized, Sparkle auto-updating
+> builds. See [ROADMAP.md](ROADMAP.md) for what's left,
+> [docs/design/v1.md](docs/design/v1.md) for the architecture and full
+> scope, [CHANGELOG.md](CHANGELOG.md) for release notes, and
 > [docs/release.md](docs/release.md) for how releases are cut.
 
 ## Why
@@ -56,7 +57,9 @@ and thirds.
 - **Mouse-driven UX** — drag-to-snap preview overlay and
   hold-modifier-to-show-grid overlay.
 - **Per-app rules** with a `compatibilityProfile` escape hatch for
-  AX-resistant apps; explicit fallback to Sequoia's `SystemWindowManager`.
+  AX-resistant apps (`standard` or `aggressive`). A fallback to Sequoia's
+  `SystemWindowManager` is designed but not built yet: the
+  `systemWindowManager` profile is accepted and treated as `standard`.
 - **Permissions flow** — Accessibility prompt handled cleanly on first
   launch, re-surfaces if a hotkey fires without trust.
 - **Updates** — Sparkle 2 with EdDSA-signed appcast.
@@ -112,8 +115,10 @@ xcodebuild -project Mullion.xcodeproj -scheme Mullion \
 ```
 
 User-editable configuration lives in `~/Library/Application Support/Mullion/`:
-`layouts.json`, `bindings.json`, `app-rules.json`, `window-history.json`,
-`settings.json`. Pick "Reload Layouts" from the menu-bar item after editing.
+`layouts.json`, `bindings.json`, `app-rules.json`, `arrangements.json`,
+`workspaces.json`, `settings.json` (plus `window-history.json`, which Mullion
+writes itself as you snap). Saved edits are picked up automatically; "Reload
+Layouts" in the menu-bar item forces a reload.
 Drag-snap and grid-overlay modifier keys, and auto-restore, are also
 editable from the layout editor's Preferences pane. If a file can't be
 parsed (a typo in a hand edit), Mullion keeps running on what it had and,
