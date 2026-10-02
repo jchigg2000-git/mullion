@@ -35,19 +35,34 @@ final class DragOverlayController {
 
     private var state: State = .idle
 
-    /// Window captured at the last `mouseDown`, regardless of modifier
-    /// state. Held until `mouseUp` so the user can press the activation
-    /// modifier *after* starting the drag and still snap whichever window
-    /// they clicked. Cleared on mouseUp.
-    private var candidateWindow: AXWindow?
+    /// The window a drag would snap, for the press in progress.
+    ///
+    /// Looking a window up is an AX round-trip to the app under the cursor,
+    /// and these handlers run inside the mouse event tap's callback. It used
+    /// to happen on *every* left click system-wide, so one app slow to
+    /// answer AX (up to the 1 s messaging timeout, per element walked)
+    /// stalled the tap until macOS disabled it. Now only a press made with
+    /// the drag modifier resolves at mouseDown; any other press stays
+    /// `.pending` and resolves only if the modifier arrives mid-drag, at the
+    /// cursor (a window dragged by its title bar moves with the cursor, so
+    /// the press point may no longer be over it). Cleared on mouseUp.
+    private enum Candidate {
+        case none
+        case pending
+        case resolved(AXWindow?)
+    }
+    private var candidate: Candidate = .none
+
+    /// AX hit-test, injectable so tests can count lookups.
+    private let windowAtPoint: (CGPoint) -> AXWindow?
 
     /// Keyed by display UUID so the cache survives a display
     /// disconnect/reconnect that keeps the same hardware identity.
     private var overlays: [String: OverlayWindow] = [:]
 
     /// Sampled wallpaper-complementary tint per display. Computed lazily on
-    /// the first overlay show for a display; cached for the app's lifetime.
-    /// Wallpaper changes mid-session don't update — re-launching picks them up.
+    /// the first overlay show for a display; recomputed when that display's
+    /// wallpaper changes (see `WallpaperTintProvider`).
     private let tintProvider = WallpaperTintProvider()
 
     init(layoutStore: LayoutStore,
@@ -55,23 +70,44 @@ final class DragOverlayController {
          appRuleStore: AppRuleStore,
          historyStore: WindowHistoryStore,
          focusIndex: FocusIndex? = nil,
-         mover: any WindowMover = ChainedWindowMover.default) {
+         mover: any WindowMover = ChainedWindowMover.default,
+         windowAtPoint: @escaping (CGPoint) -> AXWindow? = { AXWindow.atScreenPoint($0) }) {
         self.layoutStore = layoutStore
         self.settingsStore = settingsStore
         self.appRuleStore = appRuleStore
         self.recorder = SnapRecorder(history: historyStore, focusIndex: focusIndex)
         self.mover = mover
+        self.windowAtPoint = windowAtPoint
     }
 
     // MARK: - Mouse-event handlers (wired in AppDelegate)
 
-    /// Always captures the window-at-point as a candidate, even without the
-    /// modifier — `handleFlagsChanged` (or the next drag tick) can promote
-    /// the candidate to active state if the user presses the modifier
-    /// mid-drag.
+    /// Resolves the window under the press only when the drag modifier is
+    /// already held; otherwise defers (see `candidate`), so an ordinary
+    /// click costs no AX traffic. `handleFlagsChanged` (or the next drag
+    /// tick) can still promote the press if the modifier arrives mid-drag.
     func handleMouseDown(at axPoint: CGPoint, flags: CGEventFlags) {
-        candidateWindow = AXWindow.atScreenPoint(axPoint)
         state = .idle
+        if settingsStore.settings.dragSnapModifier.isSatisfied(by: flags) {
+            candidate = .resolved(windowAtPoint(axPoint))
+        } else {
+            candidate = .pending
+        }
+    }
+
+    /// The window for the press in progress, resolving a deferred press at
+    /// `axPoint` once. `nil` when no button is down or nothing is there.
+    private func candidateWindow(resolvingAt axPoint: CGPoint) -> AXWindow? {
+        switch candidate {
+        case .none:
+            return nil
+        case .resolved(let window):
+            return window
+        case .pending:
+            let window = windowAtPoint(axPoint)
+            candidate = .resolved(window)
+            return window
+        }
     }
 
     func handleMouseDragged(at axPoint: CGPoint, flags: CGEventFlags) {
@@ -79,7 +115,7 @@ final class DragOverlayController {
             cancel()
             return
         }
-        guard let window = candidateWindow else { return }
+        guard let window = candidateWindow(resolvingAt: axPoint) else { return }
         let hover = resolveHover(axPoint: axPoint)
         let firstTick: Bool
         if case .dragging = state {
@@ -98,7 +134,7 @@ final class DragOverlayController {
     func handleMouseUp(at axPoint: CGPoint, flags: CGEventFlags) {
         let snapshot = state
         state = .idle
-        candidateWindow = nil
+        candidate = .none
         hideOverlays()
         if case .dragging(let window, let hover) = snapshot, let hover {
             snap(window: window, to: hover)
@@ -115,8 +151,10 @@ final class DragOverlayController {
         // Modifier just became satisfied. If we have a candidate but no
         // active drag, promote now so the overlay appears immediately —
         // otherwise the user wouldn't see it until they nudged the mouse.
-        guard case .idle = state, let window = candidateWindow else { return }
-        guard let axPoint = currentCursorAX() else { return }
+        guard case .idle = state,
+              let axPoint = currentCursorAX(),
+              let window = candidateWindow(resolvingAt: axPoint)
+        else { return }
         let hover = resolveHover(axPoint: axPoint)
         state = .dragging(window: window, hover: hover)
         showOverlays(hover: hover)

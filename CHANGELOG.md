@@ -42,6 +42,11 @@ All notable changes to Mullion are documented here. Format follows
   per-zone focus list, which only hotkey and menu snaps fed.
 - **The overlay accent kept the first wallpaper's tint all session.**
   It now recomputes when a display's wallpaper changes.
+- **Every click anywhere asked the app under the cursor which window it
+  was.** Drag-to-snap looked the window up on each left click, inside the
+  mouse event tap, so an app slow to answer could stall the tap until
+  macOS switched it off. The lookup now happens only for a drag made with
+  the drag-snap modifier.
 - **Windows could land a point off their zone.** Zones that don't divide
   the screen evenly (thirds, halves under an odd-height menu bar, an odd
   gap) produced fractional targets that macOS rounded down. Zone edges
