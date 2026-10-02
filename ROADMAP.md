@@ -93,6 +93,12 @@ gates anything
 >   `JSONStore` copies an unreadable config aside as `<name>.json.unreadable-<ts>` before
 >   overwriting it and flushes pending writes on quit; workspace capture tries the governing
 >   layout first; drag and grid snaps feed the per-zone `.focus` list (`SnapRecorder`).
+> - ✅ Drag-to-snap no longer AX-hit-tests the window under **every** left click (it ran inside
+>   the tap callback, so one slow app could stall the tap past its timeout — a likely feeder of
+>   the "tap disabled by timeout" evidence above). Only a press with the drag modifier resolves
+>   at mouseDown; a modifier added mid-drag resolves once at the cursor. Landed on `main`
+>   2026-10-01 (`DragOverlayControllerTests`), not live-verified: the redock check should
+>   include one ⌃-drag where ⌃ is pressed *after* the drag starts.
 > - Setup note, not a bug: the saved "3 displays" arrangement doesn't match when the 2560×720
 >   display is off, so the 2-display dock gets no default layout / workspace auto-restore. The
 >   menu offers "Save current displays as arrangement…".
