@@ -12,9 +12,12 @@
 >   (live deploy contract — signing/notarization/Sparkle process, do not fold).
 > - **Decisions**: `DECISIONS.md` (append-only log; roadmap items cite it by date + title).
 
-**Legend:** ✅ done · 🔶 shipped but UNVERIFIED · ⏳ in progress · ⬜ not started · 🔬 verification
-owed · 🔁 superseded (kept for its evidence, not as work) · ⛔ **BLOCKS** — the only marker that
-gates anything
+> **Closed work is not in this file.** An item is deleted at the edit that closes it — there is
+> no ✅ status. What shipped is recorded by the closing commit and `CHANGELOG.md`. To resurrect
+> or cite a deleted item: `git log -S'<ID>' -- ROADMAP.md`, then `git show <sha>:ROADMAP.md`.
+
+**Legend:** 🔶 shipped but UNVERIFIED · ⏳ in progress · ⬜ not started · 🔬 verification owed ·
+⛔ **BLOCKS** — the only marker that gates anything
 
 **Contents:** §0 Do next · §1 Post-v1 cleanup queue · §2 Known limitations / polish · §3 Deferred
 (P2) · §4 Build-order index (historical) · §5 Open-decisions index · Appendix
@@ -36,7 +39,6 @@ gates anything
 > before it reported).
 >
 > #### What the merge brought
-> - `0d3bea4` docs(release): Homebrew cask bump step (from another session; owner OK'd shipping it).
 > - `8af76a9` the fixes: re-arm the mouse event tap on `tapDisabledByTimeout/ByUserInput` and
 >   re-check it on display change + display wake; grid clicks resolved from the tap against
 >   live geometry (`Overlay/ZoneHitTest.swift`, shared with drag-to-snap) instead of cached
@@ -81,19 +83,19 @@ gates anything
 >   Spaces setting off and/or magnification off (or a `outerMargin.bottom` on lower zones).
 > - ⬜ Not fixed (judged real but deferred by the review): grid hit-test is geometry-only, so a
 >   click on a fully transparent panel pixel could still snap — marginal.
-> - ✅ Tap re-arm now resyncs modifier state (`MouseEventTap.resyncModifiers()` reads
+> - 🔶 Tap re-arm now resyncs modifier state (`MouseEventTap.resyncModifiers()` reads
 >   `CGEventSource.flagsState` after every re-enable and feeds it through `onFlagsChanged`), so a
 >   ⌃⌥ release lost while the tap was off hides the grid instead of leaving it painted until the
 >   next click. Landed on `main` 2026-10-01 (90 tests green); like the rest of the display-change
 >   work, not live-verified.
-> - ✅ Landed on `main` 2026-10-01 (105 tests green; none live-verified): the matched
+> - 🔶 Landed on `main` 2026-10-01 (105 tests green; none live-verified): the matched
 >   arrangement's default layout is now read live from `ArrangementRegistry.currentMatch`
 >   (it was never applied at launch, ignored on edit, and kept after leaving the arrangement) —
 >   so the redock check should also confirm ⌃⌥ grid / ⌃⌥N use the arrangement's default layout;
 >   `JSONStore` copies an unreadable config aside as `<name>.json.unreadable-<ts>` before
 >   overwriting it and flushes pending writes on quit; workspace capture tries the governing
 >   layout first; drag and grid snaps feed the per-zone `.focus` list (`SnapRecorder`).
-> - ✅ Drag-to-snap no longer AX-hit-tests the window under **every** left click (it ran inside
+> - 🔶 Drag-to-snap no longer AX-hit-tests the window under **every** left click (it ran inside
 >   the tap callback, so one slow app could stall the tap past its timeout — a likely feeder of
 >   the "tap disabled by timeout" evidence above). Only a press with the drag modifier resolves
 >   at mouseDown; a modifier added mid-drag resolves once at the cursor. Landed on `main`
@@ -104,20 +106,11 @@ gates anything
 >   menu offers "Save current displays as arrangement…".
 > - The new diagnostic `.notice` lines deliberately run against CLEAN-4 below — keep them until
 >   TWITCH-1 is closed.
->
-> #### Carried from the 2026-08-07 handoff
-> - `docs/design/v1.md` "Build order" is stale (Phases A–F all shipped); only Phase G #29 unbuilt.
+
 ---
 
 ## §1 Post-v1 cleanup queue
 
-Folded from `docs/handoff.md` § "Post-v1 cleanup queue." All still open — none had a fixing
-commit in `git log`.
-
-- ✅ **CLEAN-1** (**DONE `f90b1c2`** — Sparkle's copy is stripped, template's kept) `scripts/release.sh` emits a duplicated `length` attribute in the appcast
-  snippet — `scripts/release.sh:191` hardcodes `length="$SIZE_BYTES"`, then line 193 pastes
-  `$SPARKLE_SIG_LINE` which already contains its own `length="..."`. Confirmed still present at
-  both line numbers. One-line fix: drop the script's own `length=` line.
 - ⬜ **CLEAN-3** Only the DMG is stapled, not the `.app` inside it — confirmed:
   `scripts/release.sh:146-147` staples/validates `$DMG_PATH` only. Gatekeeper does an online
   notarization check on first launch after copy-from-DMG; works, but isn't offline-safe.
@@ -130,9 +123,6 @@ commit in `git log`.
 
 ## §2 Known limitations / polish (P1)
 
-Folded from `docs/handoff.md` § "Deferred / open — P1," cross-checked against
-`CHANGELOG.md`'s "Known limitations" for 1.0.0 (which independently confirms the first two).
-
 - ⬜ **LIMIT-1** Discord (and similar Electron apps with hard min-size constraints) silently
   ignores AX resize on restore — the AX call reports success but the window snaps back.
   Candidate fix: a `respect-min-size` `CompatProfile` case (current cases per
@@ -140,40 +130,18 @@ Folded from `docs/handoff.md` § "Deferred / open — P1," cross-checked against
   min-size-aware case exists yet).
 - ⬜ **LIMIT-2** Finder in a fullscreen Space won't move — AX-resistant, possibly inherent to
   fullscreen Spaces.
-- ✅ **LIMIT-3** iTerm sidebar off-by-1px (`dx=-1`) — **fixed on `main` 2026-10-01, not
+- 🔶 **LIMIT-3** iTerm sidebar off-by-1px (`dx=-1`) — **fixed on `main` 2026-10-01, not
   live-verified.** The source was `FrameResolver` emitting fractional zone edges (e.g. a third
   of 1512 = 503.99…) that the window server truncated; it now snaps every edge to a whole point
   (`FrameResolver.snappedToWholePoints`), so shared boundaries stay flush. The `< 2` restore
   tolerance stays as a safety net. Covered by `FrameResolverTests`.
-- ~~⬜ **LIMIT-5 — Settings UI for `dragSnapModifier`/`gridModifier` still hand-edited via
-  `settings.json`.**~~ **DONE `e423244`** — "feat: Preferences pane for drag-snap & grid overlay
-  modifiers," shipped after `docs/handoff.md` was written; README already documents it. Original
-  text: *"Settings UI for the drag-snap / grid-overlay modifier keys is pending; for now edit
-  `~/Library/Application Support/Mullion/settings.json` directly."*
 
 ## §3 Deferred (P2)
 
-Folded from `docs/handoff.md` § "Deferred / open — P2."
-
-- ✅ **DEFER-1** Arrangement match doesn't behaviorally apply `defaultLayoutID` — **DONE in 1.0.1
-  (`e5b56d9`)**: `onMatched` now sets `layoutStore.preferredLayoutID`, which governs layout
-  resolution (see `CHANGELOG.md` 1.0.1).
-- ✅ **OWED (workspace capture atomicity)** — **RESOLVED 2026-10-01.** The concern was real, under a
-  different name: the handoff's `WorkspaceController.recapture` maps to
-  `LayoutEditorModel.recaptureWorkspace`, which ran `captureCurrent` (saving a brand-new
-  workspace) and then deleted that throwaway before upserting the real one. All of it ran in one
-  main-thread turn behind `JSONStore`'s debounced atomic write, so disk never held the throwaway,
-  but the store did. It now takes `WorkspaceController.snapshot(name:)` (no store access) and saves
-  once; `captureCurrent` = snapshot + one upsert. Covered by `WorkspaceControllerTests`.
-- ✅ **DEFER-2** `ModifierMask` chord coverage — **CLOSED 2026-10-01, no gap found.** The enum
-  defines all three chords (`Settings/AppSettings.swift:18-20`), the Preferences pane lists every
-  case (`SettingsEditorView.modifierPicker` iterates `ModifierMask.allCases`), and
-  `isSatisfied(by:)` matches any set exactly, so the "partial" note described the handoff-era
-  state, not a missing path.
 - ⬜ **DEFER-3** No tests for the Phase E overlays or `WorkspaceController` capture/restore —
   only exercised via the running app. (Only capture's store-write contract is covered, by
   `WorkspaceControllerTests`; the AX walk, zone matching and restore are not.)
-- ✅ **DEFER-4** (superseded framing) `SystemWindowManager` fallback (build-order item #29,
+- ⬜ **DEFER-4** `SystemWindowManager` fallback (build-order item #29,
   "Phase G") — genuinely unbuilt, confirmed by `CompatProfile.swift:16`'s own comment: "Treated
   as `.standard` by the mutator until Phase G ships." **Status: BACKLOG. Not a blocker.**
   Explicitly hold-for-demand — build only if a real user reports an app the AX path can't
@@ -182,33 +150,14 @@ Folded from `docs/handoff.md` § "Deferred / open — P2."
 ## §4 Build-order index (historical)
 
 Reference: `docs/design/v1.md` § "Build order" carries the full numbered list (1–29) and the
-original architecture reasoning for each phase — kept in place, not reproduced here. Corrected
-shipped/open status, verified against source and `git log` this pass:
+original architecture reasoning for each phase — kept in place, not reproduced here. Its status
+is stale: Phases 0 and A–F (steps 1–28) all shipped; only Phase G (#29) is unbuilt.
 
-- ✅ **Phase 0** (steps 1–14, the original v1 core) — shipped, per `docs/design/v1.md` and
-  confirmed by `CHANGELOG.md` 1.0.0.
-- ✅ **Phase A** (steps 15–16: `.focus` role, `outerMargin`/`innerGap`) — shipped. `.focus`
-  dispatches via `FocusIndex` (`ActionDispatcher.swift:75`);
-  `outerMargin`/`innerGap` implemented in `FrameResolver.swift` and exposed in
-  `LayoutEditorView.swift:375-387`.
-- ✅ **Phase B** (step 17: Sparkle + notarization) — shipped, v1.0.0 released 2026-05-26.
-- ✅ **Phase C** (steps 18–21: App Rules editor UI, Bindings editor UI, FSEvents auto-reload,
-  `compatibilityProfile` field) — shipped: `AppRulesEditorView.swift`, `BindingsEditorView.swift`,
-  `ConfigFileWatcher.swift` all exist and are wired.
-- ✅ **Phase D** (steps 22–23: arrangement detection, arrangement → default layout) — detection
-  is shipped (`ArrangementRegistry.swift`); the "apply default layout on match" half is **not**
-  fully wired — see **DEFER-1** in §3. `docs/design/v1.md` calls step 23 "the first end-to-end
-  arrangement-as-unit milestone," which overstates current behavior; only the workspace-binding
-  path actually applies anything on a match today.
-- ✅ **Phase E** (steps 24–26: mouse event tap, drag-to-snap overlay, hold-modifier grid
-  overlay) — shipped, commits `7ef78e9`, `5efbe76`, `9682b52`.
-- ✅ **Phase F** (steps 27–28: workspaces capture/restore, arrangement binding) — shipped,
-  commits `53841de`, `7736371`.
 - ⬜ **Phase G** (step 29: `SystemWindowManager` fallback) — not built. See **DEFER-4** in §3.
 
 ## §5 Open-decisions index
 
-None open. (The workspace-capture atomicity question was resolved 2026-10-01; see §3.)
+None open.
 
 ---
 
@@ -227,7 +176,7 @@ run against `~/Projects/mullion`, 2026-08-07). HEAD at fold time: `a59ba2f`.
   `git show a59ba2f:CHOICES.md`.
 - `docs/design/v1.md` (416 lines) — **not folded, not staged, left in place unedited.** Still the
   accurate architecture/schema/risk-register reference and actively linked from `README.md`. Its
-  "Build order" section sequences work and is partially stale (see §0/§4 above); the corrected
+  "Build order" section sequences work and is partially stale (see §4 above); the corrected
   status now lives here rather than being rewritten in place, per doc-consolidation's
   fold-the-sequencing-leave-the-reasoning rule — the reasoning half stays where it is.
 - `docs/release.md` (151 lines) — **not folded, not staged, left in place.** Live Sparkle /
@@ -236,3 +185,10 @@ run against `~/Projects/mullion`, 2026-08-07). HEAD at fold time: `a59ba2f`.
   never-touch canonical surface.
 
 Not migrated: none. Everything in `docs/handoff.md` and `CHOICES.md` is accounted for above.
+
+- 2026-10-12 trim to the open set (prose-upkeep 2026-W42, `cleanup-roadmap --roadmap-only`
+  rules): deleted 12 closed entries (CLEAN-1, LIMIT-5, DEFER-1, workspace-capture OWED,
+  DEFER-2, build-order Phases 0 and A–F) and 6 past-session remnants (a shipped-docs bullet,
+  three "Folded from `docs/handoff.md`" intros, a resolved-question note, a handoff heading whose
+  `v1.md` finding moved to §4); re-marked 4 done-but-unverified items 🔶 and DEFER-4 ⬜ (BACKLOG).
+  Pre-trim file: `git show 253362c:ROADMAP.md`.
