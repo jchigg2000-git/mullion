@@ -81,6 +81,17 @@
 >   end flush at `visibleFrame` bottom, so a click near a lower zone's bottom edge grazes the
 >   magnification zone. Cheapest A/B next time: quit Mullion and repeat; then try with that
 >   Spaces setting off and/or magnification off (or a `outerMargin.bottom` on lower zones).
+>   **2026-10-13, one Mullion cause found and fixed on `main`.** Dock at 15:57:11 → LG hotplug
+>   out 15:58:00.5 (power source flipped too: the whole dock link dropped) → laptop-only
+>   "Macbook Claude Code" matched 15:58:01.1 and auto-restore moved 6 iTerm/Finder windows
+>   at once → LG back 15:58:03.0 and macOS moved them again. Fix: `ArrangementRegistry`
+>   now has `onSettled`, which fires only once a match has held for 4 s with no further
+>   display change, and auto-restore hangs off that instead of `onMatched`; a blip that comes
+>   back to the arrangement that held before it restores nothing (114 tests green, not
+>   live-verified; the redock check should look for `did not settle` / `came back before
+>   anything else settled` in the `arrangements` log category). Nothing at the owner's "lots of twitching right now" (16:08): a
+>   5-minute 10 Hz probe from 16:09:12 saw no frame, display or Space change and no Mullion log,
+>   so that episode was pixel-level, not windows moving. Still open on that strand.
 > - ⬜ Not fixed (judged real but deferred by the review): grid hit-test is geometry-only, so a
 >   click on a fully transparent panel pixel could still snap — marginal.
 > - 🔶 Tap re-arm now resyncs modifier state (`MouseEventTap.resyncModifiers()` reads

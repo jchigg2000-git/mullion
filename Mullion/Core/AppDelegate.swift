@@ -72,7 +72,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.layoutStore.layouts.first { $0.id == id }?.name
             } ?? "—"
             self.log.notice("arrangement '\(arrangement.name, privacy: .public)' matched (default layout: \(layoutName, privacy: .public))")
-            self.autoRestoreBoundWorkspaces(for: arrangement, trigger: "onMatched")
+        }
+        // Restore only once the match has held: a dock that drops a display
+        // for a moment would otherwise get a restore into the gap.
+        arrangementRegistry.onSettled = { [weak self] arrangement in
+            self?.autoRestoreBoundWorkspaces(for: arrangement, trigger: "onSettled")
         }
         arrangementRegistry.onUnknown = { [weak self] signature in
             self?.log.notice("unknown display arrangement (\(signature.count, privacy: .public) display(s)) — open the editor to save it")

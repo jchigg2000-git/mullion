@@ -78,6 +78,7 @@ xcodebuild \
   -destination 'platform=macOS' \
   -archivePath "$ARCHIVE_PATH" \
   MARKETING_VERSION="$VERSION" \
+  CURRENT_PROJECT_VERSION="$VERSION" \
   CODE_SIGN_STYLE=Manual \
   CODE_SIGN_IDENTITY="$DEVELOPER_ID_APP" \
   archive | { command -v xcpretty >/dev/null && xcpretty || cat; }
@@ -111,6 +112,15 @@ xcodebuild \
 
 if [[ ! -d "$APP_BUNDLE" ]]; then
   echo "ERROR: export failed (no $APP_BUNDLE)." >&2
+  exit 1
+fi
+
+# Sparkle compares the appcast's sparkle:version (= $VERSION) against the
+# installed CFBundleVersion. A bundle left at the project default ("1")
+# would be offered its own version as an update forever.
+BUNDLE_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_BUNDLE/Contents/Info.plist")"
+if [[ "$BUNDLE_VERSION" != "$VERSION" ]]; then
+  echo "ERROR: CFBundleVersion is '$BUNDLE_VERSION', expected '$VERSION'." >&2
   exit 1
 fi
 

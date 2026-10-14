@@ -149,4 +149,66 @@ final class ArrangementTests: XCTestCase {
         let catalog = try JSONDecoder().decode(ArrangementCatalog.self, from: json)
         XCTAssertNil(catalog.arrangements[0].defaultLayoutID)
     }
+
+    // MARK: ArrangementRegistry settle
+
+    /// Regression (2026-10-13): a dock dropped the external display for
+    /// ~2.5 s; the laptop-only arrangement matched in the gap and its bound
+    /// workspace was auto-restored into it, then macOS moved everything
+    /// back when the display returned. A match must hold before it settles.
+    func test_registry_settlesOnlyAMatchThatHolds() {
+        let store = ArrangementStore(url: tempURL)
+        let registry = ArrangementRegistry(arrangementStore: store, settleDelay: 0.1)
+        var settled: [String] = []
+        registry.onSettled = { settled.append($0.name) }
+
+        // Matches, then the displays change again before the delay is up.
+        let desk = registry.captureCurrent(name: "Desk")
+        store.remove(arrangementWithID: desk.id)
+        registry.recompute()
+        pumpMainQueue(for: 0.25)
+        XCTAssertEqual(settled, [])
+
+        // Matches again and holds: settles exactly once.
+        store.upsert(desk)
+        registry.recompute()
+        pumpMainQueue(for: 0.25)
+        XCTAssertEqual(settled, ["Desk"])
+    }
+
+    /// Regression: a blip that comes back to the arrangement that held
+    /// before it restored that arrangement's workspace 4 s after macOS had
+    /// already put the windows back. A no-match that holds still re-arms it.
+    func test_registry_blipBackToSettledArrangementDoesNotSettleAgain() {
+        let store = ArrangementStore(url: tempURL)
+        let registry = ArrangementRegistry(arrangementStore: store, settleDelay: 0.1)
+        var settled: [String] = []
+        registry.onSettled = { settled.append($0.name) }
+        let desk = registry.captureCurrent(name: "Desk")
+        pumpMainQueue(for: 0.25)
+        XCTAssertEqual(settled, ["Desk"])
+
+        // Leaves and comes back inside the delay: nothing to restore.
+        store.remove(arrangementWithID: desk.id)
+        registry.recompute()
+        store.upsert(desk)
+        registry.recompute()
+        pumpMainQueue(for: 0.25)
+        XCTAssertEqual(settled, ["Desk"])
+
+        // Away long enough for "no match" to hold: coming back settles again.
+        store.remove(arrangementWithID: desk.id)
+        registry.recompute()
+        pumpMainQueue(for: 0.25)
+        store.upsert(desk)
+        registry.recompute()
+        pumpMainQueue(for: 0.25)
+        XCTAssertEqual(settled, ["Desk", "Desk"])
+    }
+
+    private func pumpMainQueue(for seconds: TimeInterval) {
+        let elapsed = expectation(description: "main queue pumped")
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { elapsed.fulfill() }
+        wait(for: [elapsed], timeout: seconds + 2)
+    }
 }

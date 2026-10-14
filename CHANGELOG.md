@@ -51,6 +51,18 @@ All notable changes to Mullion are documented here. Format follows
   the screen evenly (thirds, halves under an odd-height menu bar, an odd
   gap) produced fractional targets that macOS rounded down. Zone edges
   are now snapped to whole points, so neighbouring zones stay flush.
+- **Windows jumped around when a dock dropped a display for a moment.**
+  A display that disconnected and came back a couple of seconds later
+  briefly matched a different saved arrangement, and Mullion restored
+  that arrangement's workspace straight away. macOS then moved
+  everything back when the display returned. Workspace auto-restore now
+  waits until the displays have stayed the same for 4 seconds, and a
+  display that comes back within that time restores nothing: macOS puts
+  those windows back itself.
+- **Check for Updates offered the version you already had.** Releases
+  kept their build number at 1, and Sparkle compares build numbers, so
+  every release looked older than its own appcast entry. Releases now
+  use their version as the build number.
 
 ## [1.0.1] - 2026-09-10
 
