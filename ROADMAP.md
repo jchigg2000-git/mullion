@@ -123,13 +123,13 @@
 ## §1 Post-v1 cleanup queue
 
 - ⬜ **CLEAN-3** Only the DMG is stapled, not the `.app` inside it — confirmed:
-  `scripts/release.sh:146-147` staples/validates `$DMG_PATH` only. Gatekeeper does an online
+  `scripts/release.sh:156-157` staples/validates `$DMG_PATH` only. Gatekeeper does an online
   notarization check on first launch after copy-from-DMG; works, but isn't offline-safe.
   Reorder: notarize → staple the `.app` → repackage DMG → submit → staple DMG (or simplest:
   `xcrun stapler staple` on the `.app` post-notarize).
 - ⬜ **CLEAN-4** Demote dogfooding-era diagnostic logging from `.notice` to `.debug` —
   `autoRestore-entry/skip/bound/fire` (`AppDelegate.swift`, confirmed still `.notice` at lines
-  46/57/61/107/181/184/188/190/193/222) and the equivalent in `WorkspaceController`. Deferred
+  50/74/82/128/231/234/238/240/243/272) and the equivalent in `WorkspaceController`. Deferred
   until a few real users are running it without surprises.
 
 ## §2 Known limitations / polish (P1)
